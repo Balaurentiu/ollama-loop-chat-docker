@@ -37,12 +37,12 @@ jobs:
             server.py
 
       - name: Install Electron deps
-        run: cd electron && npm install
+        working-directory: electron
+        run: npm install
 
       - name: Build Linux installers
-        run: cd electron && npm run build:linux
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: electron
+        run: npm run build:linux
 
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
@@ -83,12 +83,12 @@ jobs:
             server.py
 
       - name: Install Electron deps
-        run: cd electron && npm install
+        working-directory: electron
+        run: npm install
 
       - name: Build Windows installer
-        run: cd electron && npm run build:win
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: electron
+        run: npm run build:win
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
@@ -123,12 +123,12 @@ jobs:
             server.py
 
       - name: Install Electron deps
-        run: cd electron && npm install
+        working-directory: electron
+        run: npm install
 
       - name: Build macOS DMG
-        run: cd electron && npm run build:mac
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: electron
+        run: npm run build:mac
 
       - name: Upload DMG
         uses: actions/upload-artifact@v4
