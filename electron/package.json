@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "description": "Multi-agent AI debate platform with Ollama and web search",
   "main": "main.js",
-  "author": "Balaurentiu",
+  "author": {
+    "name": "Balaurentiu",
+    "email": "Balaurentiu@users.noreply.github.com"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
