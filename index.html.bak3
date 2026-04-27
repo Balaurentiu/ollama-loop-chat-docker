@@ -1,0 +1,1621 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Discussion v2</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0d0d;--bg2:#161616;--bg3:#1e1e1e;--bg4:#2a2a2a;
+  --border:#333;--border2:#444;
+  --text:#e0e0e0;--text2:#aaa;--text3:#777;
+  --accent:#4a9eff;--accent2:#2d7dd2;
+  --green:#4caf50;--red:#f44336;--orange:#ff9800;--yellow:#ffd600;
+  --user-bg:#0e3a5c;--user-border:#1565c0;
+  --sys-bg:#1a1a0a;--sys-border:#555522;
+  --radius:8px;--radius2:12px;
+  --shadow:0 2px 12px rgba(0,0,0,.5);
+  --agent-a:#4a9eff;--agent-b:#a855f7;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px}
+
+/* ── LAYOUT ── */
+#app{display:flex;flex-direction:column;height:100vh}
+#topbar{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;min-height:44px}
+#main{flex:1;display:flex;overflow:hidden}
+#chat-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+#input-row{flex-shrink:0;padding:10px 12px;background:var(--bg2);border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end}
+
+/* ── TOPBAR ── */
+#topbar h1{font-size:15px;font-weight:700;color:var(--accent);white-space:nowrap}
+.tb-sep{width:1px;height:24px;background:var(--border);margin:0 4px}
+#step-counter{font-size:12px;color:var(--text2);white-space:nowrap}
+#ctx-bar-wrap{flex:1;min-width:60px;max-width:200px}
+#ctx-bar-label{font-size:11px;color:var(--text3);margin-bottom:2px}
+#ctx-bar{height:4px;background:var(--bg4);border-radius:2px;overflow:hidden}
+#ctx-bar-fill{height:100%;background:var(--green);border-radius:2px;transition:width .3s,background .3s;width:0%}
+.tb-spacer{flex:1}
+.tb-btn{padding:5px 11px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg3);color:var(--text);cursor:pointer;font-size:12px;white-space:nowrap;transition:background .15s}
+.tb-btn:hover{background:var(--bg4)}
+.tb-btn.primary{background:var(--accent2);border-color:var(--accent);color:#fff}
+.tb-btn.primary:hover{background:var(--accent)}
+.tb-btn.danger{background:#3a1010;border-color:var(--red);color:var(--red)}
+.tb-btn.danger:hover{background:#5a1515}
+.tb-btn.warn{background:#3a2800;border-color:var(--orange);color:var(--orange)}
+.tb-btn.warn:hover{background:#5a3c00}
+.tb-btn:disabled{opacity:.4;cursor:default}
+
+/* ── SETTINGS OVERLAY ── */
+#settings-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100;display:none;flex-direction:column}
+#settings-overlay.open{display:flex}
+#settings-header{display:flex;align-items:center;padding:10px 16px;background:var(--bg2);border-bottom:1px solid var(--border);gap:10px;flex-shrink:0}
+#settings-header h2{font-size:15px;font-weight:700;color:var(--accent);flex:1}
+#settings-tabs{display:flex;gap:4px}
+.stab{padding:5px 14px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg3);color:var(--text2);cursor:pointer;font-size:12px}
+.stab.active{background:var(--accent2);border-color:var(--accent);color:#fff}
+#settings-body{flex:1;overflow-y:auto;padding:16px}
+.spage{display:none}
+.spage.agents-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.spage.single-col{display:block}
+.agent-col{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius2);padding:14px;display:flex;flex-direction:column;gap:10px}
+.agent-col-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px}
+.frow{display:flex;flex-direction:column;gap:4px}
+.frow label{font-size:11px;color:var(--text2)}
+.frow input,.frow select,.frow textarea{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);padding:6px 9px;font-size:13px;width:100%}
+.frow textarea{resize:vertical;min-height:80px;font-family:inherit}
+.frow input[type=color]{padding:2px 4px;height:32px;cursor:pointer;border-radius:4px}
+.frow input[type=range]{padding:0}
+.model-row{display:flex;gap:6px}
+.model-row select{flex:1}
+.fetch-btn{padding:5px 10px;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);cursor:pointer;font-size:12px;white-space:nowrap}
+.fetch-btn:hover{background:var(--border2)}
+.manual-model-row{display:flex;gap:6px;margin-top:4px}
+.manual-model-row input{flex:1;font-size:12px}
+.srow{display:flex;align-items:center;justify-content:space-between}
+.srow label:first-child{font-size:12px;color:var(--text2)}
+.toggle{position:relative;width:38px;height:20px;cursor:pointer;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0}
+.slider{position:absolute;inset:0;background:var(--bg4);border-radius:10px;transition:.2s}
+.slider::before{content:'';position:absolute;width:14px;height:14px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+.toggle input:checked+.slider{background:var(--accent2)}
+.toggle input:checked+.slider::before{transform:translateX(18px)}
+.section-divider{height:1px;background:var(--border);margin:4px 0}
+.global-settings{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius2);padding:14px;display:flex;flex-direction:column;gap:10px;max-width:500px}
+.global-settings h3{font-size:13px;font-weight:700;color:var(--text2);margin-bottom:4px}
+
+/* ── MESSAGES ── */
+.msg{display:flex;flex-direction:column;max-width:80%;animation:fadeIn .2s}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.msg.user{align-self:flex-end}
+.msg.agent-a,.msg.agent-b,.msg.agent-s{align-self:flex-start}
+.msg.system-msg{align-self:center;max-width:90%}
+.msg-header{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px;color:var(--text3)}
+.msg-name{font-weight:700;font-size:12px}
+.msg-step{font-size:10px;opacity:.7}
+.msg-bubble{padding:10px 14px;border-radius:var(--radius2);line-height:1.6;word-break:break-word}
+.msg.user .msg-bubble{background:var(--user-bg);border:1px solid var(--user-border);border-radius:var(--radius2) var(--radius2) 2px var(--radius2)}
+.msg.agent-a .msg-bubble{background:var(--bg3);border-radius:2px var(--radius2) var(--radius2) var(--radius2);border-left:3px solid var(--agent-a)}
+.msg.agent-b .msg-bubble{background:var(--bg3);border-radius:2px var(--radius2) var(--radius2) var(--radius2);border-left:3px solid var(--agent-b)}
+.msg.agent-s .msg-bubble{background:var(--bg3);border-radius:2px var(--radius2) var(--radius2) var(--radius2);border-left:3px solid var(--accent)}
+.msg.system-msg .msg-bubble{background:var(--sys-bg);border:1px solid var(--sys-border);border-radius:var(--radius);font-size:12px;color:var(--text2);text-align:center;padding:6px 14px}
+details.think-block{background:rgba(255,255,255,.04);border-left:3px solid var(--text3);border-radius:4px;padding:6px 10px;margin-bottom:8px}
+details.think-block summary{font-size:11px;font-weight:600;color:var(--text3);cursor:pointer;list-style:none;display:flex;align-items:center;gap:4px}
+details.think-block summary::before{content:'▶';font-size:9px;transition:.15s}
+details.think-block[open] summary::before{content:'▼'}
+details.think-block pre{font-size:11px;color:var(--text3);white-space:pre-wrap;margin-top:6px}
+.typing-cursor::after{content:'▋';animation:blink .7s infinite;color:var(--accent)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* ── INPUT ROW ── */
+#user-input{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius2);color:var(--text);padding:9px 12px;font-size:13px;font-family:inherit;resize:none;min-height:42px;max-height:200px;line-height:1.5}
+#user-input:focus{outline:none;border-color:var(--accent2)}
+.send-btn{padding:9px 16px;border-radius:var(--radius2);border:none;background:var(--accent2);color:#fff;cursor:pointer;font-size:13px;font-weight:600;transition:background .15s;min-height:42px;align-self:flex-end;white-space:nowrap}
+.send-btn:hover{background:var(--accent)}
+.send-btn:disabled{opacity:.4;cursor:default}
+
+/* ── PAUSE / INJECT ── */
+#inject-panel{padding:10px 12px;background:var(--bg2);border-top:1px solid var(--border);display:none;flex-direction:column;gap:8px;flex-shrink:0}
+#inject-panel.open{display:flex}
+#inject-label{font-size:12px;color:var(--orange);font-weight:600}
+#inject-ta{background:var(--bg3);border:1px solid var(--orange);border-radius:var(--radius);color:var(--text);padding:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:60px}
+.inject-btns{display:flex;gap:8px}
+
+/* ── CTX WARNING ── */
+#ctx-warn-banner{display:none;padding:8px 14px;background:#3a2800;border-bottom:1px solid var(--orange);color:var(--orange);font-size:12px;flex-shrink:0;align-items:center;gap:8px}
+#ctx-warn-banner.show{display:flex}
+#ctx-warn-banner button{margin-left:auto;padding:3px 10px;border-radius:var(--radius);border:1px solid var(--orange);background:transparent;color:var(--orange);cursor:pointer;font-size:12px}
+
+/* ── TOAST ── */
+#toast-wrap{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:9999;pointer-events:none}
+.toast{padding:9px 14px;border-radius:var(--radius);background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:13px;box-shadow:var(--shadow);animation:toastIn .2s;pointer-events:auto}
+.toast.ok{border-color:var(--green);color:var(--green)}
+.toast.err{border-color:var(--red);color:var(--red)}
+.toast.warn{border-color:var(--orange);color:var(--orange)}
+@keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+
+/* ── HTML CODE BLOCK ── */
+.html-code-wrap{margin:.4em 0;border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden}
+.html-code-toolbar{display:flex;align-items:center;justify-content:space-between;padding:4px 10px;background:var(--bg4);border-bottom:1px solid var(--border)}
+.html-code-badge{font-size:11px;font-weight:700;color:var(--orange);font-family:monospace}
+.run-html-btn{padding:3px 10px;border-radius:var(--radius);border:1px solid var(--green);background:rgba(76,175,80,.12);color:var(--green);cursor:pointer;font-size:12px;font-weight:600;transition:background .15s}
+.run-html-btn:hover{background:rgba(76,175,80,.25)}
+.html-code-wrap pre{margin:0;border-radius:0;border:none}
+
+/* (html runner modal removed — opens in new tab) */
+
+/* ── CONTEXT MENU ── */
+#ctx-menu{position:fixed;z-index:1000;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:4px 0;box-shadow:var(--shadow);display:none;min-width:180px}
+.ctx-item{padding:7px 14px;cursor:pointer;font-size:13px;color:var(--text)}
+.ctx-item:hover{background:var(--bg4)}
+.ctx-sep{height:1px;background:var(--border);margin:3px 0}
+.ctx-check-row{display:flex;align-items:center;gap:8px;padding:6px 14px;font-size:12px;color:var(--text2);cursor:pointer}
+
+/* ── SUMMARIZE MODAL ── */
+#summ-modal{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:200;display:none;align-items:center;justify-content:center}
+#summ-modal.open{display:flex}
+.summ-box{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius2);padding:20px;width:480px;max-width:95vw;display:flex;flex-direction:column;gap:14px}
+.summ-box h3{font-size:15px;font-weight:700;color:var(--accent)}
+.summ-box p{font-size:13px;color:var(--text2);line-height:1.5}
+.summ-box label{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer}
+.summ-btns{display:flex;gap:8px;justify-content:flex-end}
+
+/* ── MARKDOWN CONTENT ── */
+.md-content{overflow-wrap:break-word}
+.md-content h1,.md-content h2,.md-content h3{color:#7aa5d2;margin:.5em 0 .3em}
+.md-content h1{font-size:1.3em}.md-content h2{font-size:1.15em}.md-content h3{font-size:1.05em}
+.md-content p{margin:.3em 0}
+.md-content code{background:rgba(0,0,0,.3);padding:1px 5px;border-radius:3px;font-family:'Courier New',monospace;font-size:.88em;color:#ce9178}
+.md-content pre{background:rgba(0,0,0,.4);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;overflow-x:auto;margin:.4em 0}
+.md-content pre code{background:none;padding:0;color:#d4d4d4;font-size:.85em}
+.md-content ul,.md-content ol{padding-left:1.4em;margin:.2em 0}
+.md-content li{margin:.1em 0}
+.md-content blockquote{border-left:3px solid var(--border2);padding-left:10px;color:var(--text2);margin:.3em 0}
+.md-content table{border-collapse:collapse;margin:.4em 0;width:100%;font-size:.9em}
+.md-content th,.md-content td{border:1px solid var(--border2);padding:4px 9px}
+.md-content th{background:rgba(255,255,255,.07);font-weight:600}
+.md-content a{color:var(--accent)}
+.md-content hr{border:none;border-top:1px solid var(--border);margin:.5em 0}
+.md-content .math-block{overflow-x:auto;text-align:center;margin:.4em 0;padding:.3em 0}
+.mermaid-wrap{margin:.4em 0;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:var(--radius);padding:10px;overflow-x:auto;text-align:center}
+.mermaid-err{color:var(--red);font-size:11px;background:rgba(244,67,54,.1);border:1px solid var(--red);border-radius:var(--radius);padding:8px;margin:.4em 0}
+.svg-wrap{margin:.4em 0;overflow-x:auto}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <h1>AI Discussion v2</h1>
+  <div class="tb-sep"></div>
+  <span id="step-counter">Pas 0</span>
+  <div class="tb-sep"></div>
+  <div id="ctx-bar-wrap">
+    <div id="ctx-bar-label">Context: 0%</div>
+    <div id="ctx-bar"><div id="ctx-bar-fill"></div></div>
+  </div>
+  <div class="tb-spacer"></div>
+  <button class="tb-btn" id="btn-pause" onclick="togglePause()" disabled>⏸ Pauză</button>
+  <button class="tb-btn warn" id="btn-end" onclick="endDiscussion()" disabled>⏹ Încheie</button>
+  <button class="tb-btn" id="btn-summ" onclick="openSummModal()">∑ Sumarizează</button>
+  <button class="tb-btn" id="btn-clear" onclick="clearConversation()" title="Șterge conversația curentă">🗑 Șterge</button>
+  <button class="tb-btn primary" id="btn-start" onclick="handleStartBtn()">▶ Start</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="saveSession()" title="Salvează sesiunea completă (ZIP)">💾 Salvează</button>
+  <button class="tb-btn" onclick="document.getElementById('load-session-input').click()" title="Încarcă sesiune din ZIP">📂 Încarcă</button>
+  <input type="file" id="load-session-input" accept=".zip" style="display:none" onchange="loadSession(this)">
+  <button class="tb-btn" onclick="openSettings()">⚙ Setări</button>
+</div>
+
+<!-- CTX WARNING -->
+<div id="ctx-warn-banner">
+  <span id="ctx-warn-text">⚠ Context aproape plin!</span>
+  <button onclick="openSummModal()">Sumarizează acum</button>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+  <div id="chat-area">
+    <div id="messages"></div>
+    <!-- INJECT PANEL -->
+    <div id="inject-panel">
+      <div id="inject-label">⏸ Discuție în pauză — injectează mesaj opțional:</div>
+      <textarea id="inject-ta" placeholder="Mesajul tău pentru agenți..."></textarea>
+      <div class="inject-btns">
+        <button class="tb-btn primary" onclick="injectAndResume()">Injectează &amp; Continuă</button>
+        <button class="tb-btn" onclick="resumeDiscussion()">Continuă fără mesaj</button>
+      </div>
+    </div>
+    <!-- INPUT ROW -->
+    <div id="input-row">
+      <textarea id="user-input" placeholder="Mesaj de start (Enter = trimite, Shift+Enter = linie nouă)..." rows="1"></textarea>
+      <button class="send-btn" id="btn-send" onclick="handleSend()">Trimite</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<!-- ════════════════════════════════════════════
+     SETTINGS OVERLAY
+════════════════════════════════════════════ -->
+<div id="settings-overlay">
+  <div id="settings-header">
+    <h2>⚙ Setări AI Discussion v2</h2>
+    <div id="settings-tabs">
+      <button class="stab active" onclick="showSettingsTab('agents')">Agenți</button>
+      <button class="stab" onclick="showSettingsTab('global')">General</button>
+    </div>
+    <div style="flex:1"></div>
+    <button class="tb-btn primary" onclick="saveAndClose()">✓ Salvează &amp; Închide</button>
+    <button class="tb-btn" onclick="closeSettings()" style="margin-left:6px">✕</button>
+  </div>
+  <div id="settings-body">
+
+    <!-- ── AGENTS TAB ── -->
+    <div id="stab-agents" class="spage agents-grid" style="display:grid">
+
+      <!-- AGENT A -->
+      <div class="agent-col">
+        <div class="agent-col-title">
+          <span>Agent A</span>
+          <input type="color" id="aColor" value="#4a9eff" title="Culoare Agent A">
+        </div>
+        <div class="frow"><label>Nume</label><input id="aName" value="Agent A"></div>
+        <div class="frow"><label>Provider</label>
+          <select id="aProvider" onchange="onProviderChange('a')">
+            <option value="ollama">Ollama</option>
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="anthropic">Anthropic</option>
+          </select>
+        </div>
+        <div class="frow" id="aUrlRow"><label>Server URL</label><input id="aServerUrl" value="http://localhost:11434"></div>
+        <div class="frow" id="aKeyRow" style="display:none"><label>API Key</label><input id="aApiKey" type="password" placeholder="sk-..."></div>
+        <div class="frow"><label>Model</label>
+          <div class="model-row">
+            <select id="aModel"></select>
+            <button class="fetch-btn" onclick="fetchModels('a')">⟳ Fetch</button>
+          </div>
+          <div class="manual-model-row">
+            <input id="aManualModel" placeholder="sau scrie manual...">
+            <button class="fetch-btn" onclick="setManualModel('a')">Set</button>
+          </div>
+        </div>
+        <div class="frow"><label>System Prompt <span style="font-size:10px;color:var(--text3)">(scrie [STOP_DISCUSSION] când vrei să închei)</span></label><textarea id="aSystem" rows="5"></textarea></div>
+        <div class="frow"><label>Temperatură: <span id="aTempVal">0.7</span></label>
+          <input type="range" id="aTemp" min="0" max="2" step="0.05" value="0.7"
+            oninput="document.getElementById('aTempVal').textContent=parseFloat(this.value).toFixed(2)">
+        </div>
+        <div class="frow"><label>Context Size (tokens)</label><input id="aCtx" type="number" value="4096" min="512" max="131072"></div>
+        <div class="srow" id="aThinkRow"><label>Think (Ollama)</label>
+          <label class="toggle"><input type="checkbox" id="aThink"><span class="slider"></span></label>
+        </div>
+      </div>
+
+      <!-- AGENT B -->
+      <div class="agent-col">
+        <div class="agent-col-title">
+          <span>Agent B</span>
+          <input type="color" id="bColor" value="#a855f7" title="Culoare Agent B">
+        </div>
+        <div class="frow"><label>Nume</label><input id="bName" value="Agent B"></div>
+        <div class="frow"><label>Provider</label>
+          <select id="bProvider" onchange="onProviderChange('b')">
+            <option value="ollama">Ollama</option>
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="anthropic">Anthropic</option>
+          </select>
+        </div>
+        <div class="frow" id="bUrlRow"><label>Server URL</label><input id="bServerUrl" value="http://localhost:11434"></div>
+        <div class="frow" id="bKeyRow" style="display:none"><label>API Key</label><input id="bApiKey" type="password" placeholder="sk-..."></div>
+        <div class="frow"><label>Model</label>
+          <div class="model-row">
+            <select id="bModel"></select>
+            <button class="fetch-btn" onclick="fetchModels('b')">⟳ Fetch</button>
+          </div>
+          <div class="manual-model-row">
+            <input id="bManualModel" placeholder="sau scrie manual...">
+            <button class="fetch-btn" onclick="setManualModel('b')">Set</button>
+          </div>
+        </div>
+        <div class="frow"><label>System Prompt <span style="font-size:10px;color:var(--text3)">(scrie [STOP_DISCUSSION] când vrei să închei)</span></label><textarea id="bSystem" rows="5"></textarea></div>
+        <div class="frow"><label>Temperatură: <span id="bTempVal">0.7</span></label>
+          <input type="range" id="bTemp" min="0" max="2" step="0.05" value="0.7"
+            oninput="document.getElementById('bTempVal').textContent=parseFloat(this.value).toFixed(2)">
+        </div>
+        <div class="frow"><label>Context Size (tokens)</label><input id="bCtx" type="number" value="4096" min="512" max="131072"></div>
+        <div class="srow" id="bThinkRow"><label>Think (Ollama)</label>
+          <label class="toggle"><input type="checkbox" id="bThink"><span class="slider"></span></label>
+        </div>
+      </div>
+
+      <!-- SYNTH AGENT -->
+      <div class="agent-col">
+        <div class="agent-col-title"><span>Agent Sinteză</span></div>
+        <div class="frow"><label>Nume</label><input id="sName" value="Sinteză"></div>
+        <div class="frow"><label>Provider</label>
+          <select id="sProvider" onchange="onProviderChange('s')">
+            <option value="ollama">Ollama</option>
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="anthropic">Anthropic</option>
+          </select>
+        </div>
+        <div class="frow" id="sUrlRow"><label>Server URL</label><input id="sServerUrl" value="http://localhost:11434"></div>
+        <div class="frow" id="sKeyRow" style="display:none"><label>API Key</label><input id="sApiKey" type="password" placeholder="sk-..."></div>
+        <div class="frow"><label>Model</label>
+          <div class="model-row">
+            <select id="sModel"></select>
+            <button class="fetch-btn" onclick="fetchModels('s')">⟳ Fetch</button>
+          </div>
+          <div class="manual-model-row">
+            <input id="sManualModel" placeholder="sau scrie manual...">
+            <button class="fetch-btn" onclick="setManualModel('s')">Set</button>
+          </div>
+        </div>
+        <div class="frow"><label>System Prompt</label>
+          <textarea id="sSystem" rows="3">Ești un agent de sinteză. Generează un rezumat structurat, clar și complet al dialogului, păstrând toate informațiile importante.</textarea>
+        </div>
+        <div class="frow"><label>Temperatură: <span id="sTempVal">0.5</span></label>
+          <input type="range" id="sTemp" min="0" max="2" step="0.05" value="0.5"
+            oninput="document.getElementById('sTempVal').textContent=parseFloat(this.value).toFixed(2)">
+        </div>
+        <div class="frow"><label>Context Size (tokens)</label><input id="sCtx" type="number" value="8192" min="512" max="131072"></div>
+        <div class="srow" id="sThinkRow"><label>Think (Ollama)</label>
+          <label class="toggle"><input type="checkbox" id="sThink"><span class="slider"></span></label>
+        </div>
+        <div class="section-divider"></div>
+        <div class="frow"><label>Prompt Sumarizare (variabilă: {dialogue})</label>
+          <textarea id="sSynthPrompt" rows="5">### Sumarizează dialogul următor într-un rezumat structurat și complet:
+
+{dialogue}
+
+### REZUMAT FINAL:</textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── GLOBAL TAB ── -->
+    <div id="stab-global" class="spage single-col" style="display:none">
+      <div class="global-settings">
+        <h3>Setări generale</h3>
+        <div class="frow"><label>Pași maximi (0 = nelimitat)</label><input id="maxSteps" type="number" value="0" min="0" max="9999"></div>
+        <div class="srow"><label>Auto-sumarizare la 90% context</label>
+          <label class="toggle"><input type="checkbox" id="autoSumm" checked><span class="slider"></span></label>
+        </div>
+        <div class="frow"><label>Agent care începe primul</label>
+          <select id="startAgent" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);padding:6px 9px;font-size:13px">
+            <option value="a">Agent A</option>
+            <option value="b">Agent B</option>
+          </select>
+        </div>
+        <div class="frow"><label>Prefix mesaj utilizator (inject)</label><input id="injectPrefix" value="[Utilizator]:"></div>
+      </div>
+    </div>
+
+  </div>
+</div><!-- settings-overlay -->
+
+<!-- SUMMARIZE MODAL -->
+<div id="summ-modal">
+  <div class="summ-box">
+    <h3>∑ Sumarizează Discuția</h3>
+    <p>Agentul de sinteză va genera un rezumat structurat al discuției curente.</p>
+    <label>
+      <input type="checkbox" id="summ-replace" checked>
+      Înlocuiește istoricul cu rezumatul (reduce token usage)
+    </label>
+    <div class="summ-btns">
+      <button class="tb-btn primary" onclick="doSummarize()">Generează Rezumat</button>
+      <button class="tb-btn" onclick="closeSummModal()">Anulează</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- CONTEXT MENU -->
+<div id="ctx-menu">
+  <div class="ctx-check-row">
+    <input type="checkbox" id="ctx-include-think">
+    <span>Include gândire</span>
+  </div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="doExportHtml()">💾 Export HTML</div>
+  <div class="ctx-item" onclick="copyMsgText()">📋 Copiază text</div>
+</div>
+
+<!-- TOAST -->
+<div id="toast-wrap"></div>
+
+<!-- ════════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ─── KATEX + MERMAID INIT ───
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'dark',
+  securityLevel: 'loose',
+  themeVariables: {
+    primaryColor: '#1e3a5f', primaryTextColor: '#e0e0e0',
+    primaryBorderColor: '#3a6fa8', lineColor: '#6a9fd8',
+    secondaryColor: '#1a2a1a', tertiaryColor: '#1a1a2e'
+  }
+});
+
+// ─── CONSTANTS ───
+const ANTHROPIC_MODELS = [
+  'claude-opus-4-6','claude-sonnet-4-6','claude-haiku-4-5-20251001',
+  'claude-opus-4-5','claude-sonnet-4-5',
+  'claude-3-5-sonnet-20241022','claude-3-5-haiku-20241022',
+  'claude-3-opus-20240229','claude-3-sonnet-20240229','claude-3-haiku-20240307',
+];
+
+const DEFAULTS = {
+  aName:'Agent A', aColor:'#4a9eff', aProvider:'ollama',
+  aServerUrl:'http://localhost:11434', aApiKey:'', aModel:'',
+  aSystem:'Ești Agent A. Discuți cu Agent B pe tema dată de utilizator. Fii direct, analitic și constructiv. Folosește [STOP_DISCUSSION] doar după cel puțin 3 schimburi complete și numai dacă nu mai există niciun unghi neexplorat al temei.',
+  aTemp:0.7, aCtx:4096, aThink:false,
+
+  bName:'Agent B', bColor:'#a855f7', bProvider:'ollama',
+  bServerUrl:'http://localhost:11434', bApiKey:'', bModel:'',
+  bSystem:'Ești Agent B. Discuți cu Agent A pe tema dată de utilizator. Aduce perspective noi și pune întrebări relevante. Folosește [STOP_DISCUSSION] doar după cel puțin 3 schimburi complete și numai dacă nu mai există niciun unghi neexplorat al temei.',
+  bTemp:0.7, bCtx:4096, bThink:false,
+
+  sName:'Sinteză', sProvider:'ollama',
+  sServerUrl:'http://localhost:11434', sApiKey:'', sModel:'',
+  sSystem:'Ești un agent de sinteză. Generează un rezumat structurat, clar și complet al dialogului, păstrând toate informațiile importante.',
+  sTemp:0.5, sCtx:8192, sThink:false,
+  sSynthPrompt:'### Sumarizează dialogul următor într-un rezumat structurat și complet:\n\n{dialogue}\n\n### REZUMAT FINAL:',
+
+  maxSteps:0, autoSumm:true, startAgent:'a', injectPrefix:'[Utilizator]:',
+};
+
+// ─── STATE ───
+let cfg = {...DEFAULTS};
+const state = {
+  running: false,
+  paused: false,
+  ending: false,
+  stepCount: 0,
+  discussion: [],   // [{role:'a'|'b'|'user'|'system', content, step?}]
+  pendingInject: null,
+  abortCtrl: null,
+  warnedCtx: false,
+};
+let _resumeResolve = null;
+let _ctxTargetMsg = null;
+
+// ─── CONFIG PERSISTENCE ───
+function loadCfg() {
+  try {
+    const s = localStorage.getItem('ai_disc_v2');
+    if (s) cfg = {...DEFAULTS, ...JSON.parse(s)};
+  } catch(e) {}
+  applyCfgToUI();
+  applyColors();
+}
+
+function saveCfg() {
+  readCfgFromUI();
+  localStorage.setItem('ai_disc_v2', JSON.stringify(cfg));
+}
+
+function readCfgFromUI() {
+  const strFields = [
+    'aName','aServerUrl','aApiKey','aModel','aSystem',
+    'bName','bServerUrl','bApiKey','bModel','bSystem',
+    'sName','sServerUrl','sApiKey','sModel','sSystem',
+    'sSynthPrompt','injectPrefix'
+  ];
+  strFields.forEach(k => {
+    const el = document.getElementById(k);
+    if (el) cfg[k] = el.value;
+  });
+  cfg.aColor = document.getElementById('aColor').value;
+  cfg.bColor = document.getElementById('bColor').value;
+  cfg.aProvider = document.getElementById('aProvider').value;
+  cfg.bProvider = document.getElementById('bProvider').value;
+  cfg.sProvider = document.getElementById('sProvider').value;
+  cfg.aTemp = parseFloat(document.getElementById('aTemp').value) || 0.7;
+  cfg.bTemp = parseFloat(document.getElementById('bTemp').value) || 0.7;
+  cfg.sTemp = parseFloat(document.getElementById('sTemp').value) || 0.5;
+  cfg.aCtx = parseInt(document.getElementById('aCtx').value) || 4096;
+  cfg.bCtx = parseInt(document.getElementById('bCtx').value) || 4096;
+  cfg.sCtx = parseInt(document.getElementById('sCtx').value) || 8192;
+  cfg.aThink = document.getElementById('aThink').checked;
+  cfg.bThink = document.getElementById('bThink').checked;
+  cfg.sThink = document.getElementById('sThink').checked;
+  cfg.maxSteps = parseInt(document.getElementById('maxSteps').value) || 0;
+  cfg.autoSumm = document.getElementById('autoSumm').checked;
+  cfg.startAgent = document.getElementById('startAgent').value;
+}
+
+function applyCfgToUI() {
+  const str = [
+    'aName','aServerUrl','aApiKey','aSystem',
+    'bName','bServerUrl','bApiKey','bSystem',
+    'sName','sServerUrl','sApiKey','sSystem','sSynthPrompt','injectPrefix'
+  ];
+  str.forEach(k => {
+    const el = document.getElementById(k);
+    if (el && cfg[k] !== undefined) el.value = cfg[k];
+  });
+  document.getElementById('aColor').value = cfg.aColor || '#4a9eff';
+  document.getElementById('bColor').value = cfg.bColor || '#a855f7';
+  document.getElementById('aProvider').value = cfg.aProvider || 'ollama';
+  document.getElementById('bProvider').value = cfg.bProvider || 'ollama';
+  document.getElementById('sProvider').value = cfg.sProvider || 'ollama';
+  ['a','b','s'].forEach(ag => {
+    const tv = parseFloat(cfg[ag+'Temp']) || (ag==='s'?0.5:0.7);
+    document.getElementById(ag+'Temp').value = tv;
+    document.getElementById(ag+'TempVal').textContent = tv.toFixed(2);
+    document.getElementById(ag+'Ctx').value = cfg[ag+'Ctx'] || (ag==='s'?8192:4096);
+    document.getElementById(ag+'Think').checked = !!cfg[ag+'Think'];
+  });
+  document.getElementById('maxSteps').value = cfg.maxSteps || 0;
+  document.getElementById('autoSumm').checked = cfg.autoSumm !== false;
+  document.getElementById('startAgent').value = cfg.startAgent || 'a';
+  onProviderChange('a'); onProviderChange('b'); onProviderChange('s');
+  // Restore saved model selection
+  ['a','b','s'].forEach(ag => {
+    const model = cfg[ag+'Model'];
+    if (!model) return;
+    const sel = document.getElementById(ag+'Model');
+    let opt = Array.from(sel.options).find(o => o.value === model);
+    if (!opt) { opt = new Option(model, model); sel.add(opt); }
+    sel.value = model;
+  });
+}
+
+function applyColors() {
+  document.documentElement.style.setProperty('--agent-a', cfg.aColor || '#4a9eff');
+  document.documentElement.style.setProperty('--agent-b', cfg.bColor || '#a855f7');
+}
+
+// ─── SETTINGS UI ───
+function openSettings() {
+  document.getElementById('settings-overlay').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settings-overlay').classList.remove('open');
+}
+function saveAndClose() {
+  saveCfg();
+  applyColors();
+  closeSettings();
+  toast('Setări salvate', 'ok');
+}
+function showSettingsTab(tab) {
+  document.querySelectorAll('.spage').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('.stab').forEach(b => b.classList.remove('active'));
+  if (tab === 'agents') {
+    document.getElementById('stab-agents').style.display = 'grid';
+    document.querySelectorAll('.stab')[0].classList.add('active');
+  } else {
+    document.getElementById('stab-global').style.display = 'block';
+    document.querySelectorAll('.stab')[1].classList.add('active');
+  }
+}
+
+function onProviderChange(ag) {
+  const prov = document.getElementById(ag + 'Provider').value;
+  const urlRow = document.getElementById(ag + 'UrlRow');
+  const keyRow = document.getElementById(ag + 'KeyRow');
+  const thinkRow = document.getElementById(ag + 'ThinkRow');
+  if (urlRow) urlRow.style.display = prov === 'ollama' ? '' : 'none';
+  if (keyRow) keyRow.style.display = prov !== 'ollama' ? '' : 'none';
+  if (thinkRow) thinkRow.style.display = prov === 'ollama' ? '' : 'none';
+  if (prov === 'anthropic') _populateAnthropicModels(ag);
+}
+
+function _populateAnthropicModels(ag) {
+  const sel = document.getElementById(ag + 'Model');
+  const cur = sel.value;
+  sel.innerHTML = '';
+  ANTHROPIC_MODELS.forEach(m => sel.add(new Option(m, m)));
+  if (ANTHROPIC_MODELS.includes(cur)) sel.value = cur;
+}
+
+async function fetchModels(ag) {
+  readCfgFromUI();
+  const prov = cfg[ag + 'Provider'];
+  if (prov === 'anthropic') { _populateAnthropicModels(ag); toast('Modele Anthropic încărcate', 'ok'); return; }
+  const params = new URLSearchParams({ provider: prov });
+  if (prov === 'ollama') params.set('server', cfg[ag + 'ServerUrl'] || 'http://localhost:11434');
+  else params.set('apiKey', cfg[ag + 'ApiKey'] || '');
+  try {
+    toast('Se încarcă modelele...');
+    const r = await fetch('/api/models?' + params);
+    const d = await r.json();
+    if (d.error) { toast('Eroare: ' + d.error, 'err'); return; }
+    const sel = document.getElementById(ag + 'Model');
+    const cur = sel.value;
+    sel.innerHTML = '';
+    (d.models || []).forEach(m => sel.add(new Option(m, m)));
+    if (cur && d.models.includes(cur)) sel.value = cur;
+    toast(d.models.length + ' modele încărcate', 'ok');
+  } catch(e) { toast('Eroare: ' + e.message, 'err'); }
+}
+
+function setManualModel(ag) {
+  const inp = document.getElementById(ag + 'ManualModel');
+  const val = inp.value.trim();
+  if (!val) return;
+  const sel = document.getElementById(ag + 'Model');
+  let opt = Array.from(sel.options).find(o => o.value === val);
+  if (!opt) { opt = new Option(val, val); sel.add(opt); }
+  sel.value = val;
+  inp.value = '';
+  toast('Model setat: ' + val, 'ok');
+}
+
+// ─── STREAMING ───
+async function* apiStream(agKey, messages, signal) {
+  readCfgFromUI();
+  const prov = cfg[agKey + 'Provider'];
+  const body = {
+    provider: prov,
+    model: cfg[agKey + 'Model'],
+    messages,
+    systemPrompt: cfg[agKey + 'System'],
+    temperature: cfg[agKey + 'Temp'],
+    contextSize: cfg[agKey + 'Ctx'],
+    thinkEnabled: cfg[agKey + 'Think'] || false,
+  };
+  if (prov === 'ollama') body.serverUrl = cfg[agKey + 'ServerUrl'];
+  else body.apiKey = cfg[agKey + 'ApiKey'];
+
+  const resp = await fetch('/api/chat', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const reader = resp.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, {stream: true});
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try { yield JSON.parse(line); } catch(e) {}
+    }
+  }
+}
+
+// ─── CONTEXT BUILDING ───
+function buildContext(agKey, discussion) {
+  const msgs = [];
+  for (const entry of discussion) {
+    if (entry.role === 'system') continue;
+    const isMe = entry.role === agKey;
+    const role = isMe ? 'assistant' : 'user';
+    const name = entry.role === 'user' ? (cfg.injectPrefix || '[Utilizator]:')
+                 : entry.role === 'a' ? cfg.aName
+                 : cfg.bName;
+    const prefix = isMe ? '' : name + '\n';
+    const content = prefix + entry.content;
+    if (msgs.length > 0 && msgs[msgs.length-1].role === role) {
+      msgs[msgs.length-1].content += '\n\n' + content;
+    } else {
+      msgs.push({role, content});
+    }
+  }
+  if (msgs.length === 0 || msgs[0].role !== 'user') {
+    msgs.unshift({role: 'user', content: '(start)'});
+  }
+  return msgs;
+}
+
+// ─── CONTEXT BAR ───
+function estimateTokens() {
+  return Math.round(state.discussion.reduce((s, e) => s + e.content.length, 0) / 4);
+}
+function getMaxCtx() {
+  return Math.max(cfg.aCtx || 4096, cfg.bCtx || 4096);
+}
+function updateCtxBar() {
+  const used = estimateTokens();
+  const max = getMaxCtx();
+  const pct = Math.min(100, Math.round(used / max * 100));
+  const fill = document.getElementById('ctx-bar-fill');
+  fill.style.width = pct + '%';
+  fill.style.background = pct > 85 ? 'var(--red)' : pct > 65 ? 'var(--orange)' : 'var(--green)';
+  document.getElementById('ctx-bar-label').textContent = `Context: ${pct}% (~${used} tok)`;
+  if (pct >= 90 && !state.warnedCtx) {
+    state.warnedCtx = true;
+    _showCtxWarn(pct);
+    if (cfg.autoSumm && state.running) {
+      addSystemMsg('⚠ Context la 90%! Inițiez auto-sumarizare...');
+      runSummarize(true);
+    }
+  } else if (pct >= 80 && !state.warnedCtx) {
+    _showCtxWarn(pct);
+  }
+}
+function _showCtxWarn(pct) {
+  document.getElementById('ctx-warn-text').textContent = `⚠ Context la ${pct}% — consideră sumarizarea!`;
+  document.getElementById('ctx-warn-banner').classList.add('show');
+}
+
+// ─── DISCUSSION ENGINE ───
+function handleStartBtn() {
+  if (state.running) {
+    stopAll();
+  } else {
+    startDiscussion();
+  }
+}
+
+async function startDiscussion() {
+  readCfgFromUI();
+  const userMsg = document.getElementById('user-input').value.trim();
+  if (!userMsg) { toast('Introdu un mesaj de start', 'warn'); return; }
+  if (!cfg.aModel) { toast('Configurează modelul pentru Agent A', 'warn'); return; }
+  if (!cfg.bModel) { toast('Configurează modelul pentru Agent B', 'warn'); return; }
+
+  state.running = true; state.paused = false; state.ending = false;
+  state.stepCount = 0; state.warnedCtx = false;
+  state.discussion = []; state.pendingInject = null;
+  document.getElementById('messages').innerHTML = '';
+  document.getElementById('user-input').value = '';
+  document.getElementById('ctx-warn-banner').classList.remove('show');
+  setUIRunning(true);
+
+  state.discussion.push({role: 'user', content: userMsg, step: 0});
+  addMessageToUI('user', userMsg, 'Tu');
+  updateCtxBar();
+
+  state.abortCtrl = new AbortController();
+  try {
+    await runLoop();
+  } catch(e) {
+    if (e.name !== 'AbortError') toast('Eroare: ' + e.message, 'err');
+  }
+  setUIRunning(false);
+}
+
+// ── AUTO-STOP DETECTION ──
+// Patterns that signal an agent considers the discussion finished
+const _DONE_PATTERNS = [
+  /discuți[ae]\s+(este\s+|s[-‑]a\s+)?[îi]nchei[ae]t[ăa]/i,
+  /sesiune\s+[îi]nchis[ăa]/i,
+  /nu\s+(mai\s+)?am\s+nimic\s+de\s+ad[ăa]ugat/i,
+  /nu\s+exist[ăa]\s+alte\s+elemente\s+de\s+(discutat|ad[ăa]ugat)/i,
+  /\[STOP_DISCUSSION\]/i,
+  /\[END_DISCUSSION\]/i,
+  /session\s+(is\s+)?(closed|finished|complete|ended)/i,
+  /discuția\s+s[-‑]a\s+[îi]ncheiat\s+cu\s+succes/i,
+  /am\s+ajuns\s+la\s+un\s+consens\s+complet/i,
+  /nu\s+voi\s+mai\s+r[ăa]spunde/i,
+];
+
+function _detectDone(content) {
+  if (!content) return false;
+  const trimmed = content.trim();
+  // Very short response = only ✅/confirmations, nothing substantive
+  if (trimmed.length < 30 && /^[\s✅✔️🔴☑️\-–•*]+$/.test(trimmed)) return true;
+  return _DONE_PATTERNS.some(p => p.test(content));
+}
+
+async function runLoop() {
+  let cur = cfg.startAgent || 'a';
+  let consecutiveDone = 0;  // how many consecutive turns signaled "done"
+
+  while (state.running) {
+    if (state.paused) {
+      await waitForResume();
+      if (!state.running) break;
+    }
+
+    // Inject pending user message (resets done counter — user restarted discussion)
+    if (state.pendingInject) {
+      const msg = state.pendingInject;
+      state.pendingInject = null;
+      consecutiveDone = 0;
+      state.discussion.push({role: 'user', content: msg, step: state.stepCount});
+      addMessageToUI('user', msg, 'Tu');
+      updateCtxBar();
+    }
+
+    if (state.ending) {
+      await streamTurn(cur, true);
+      if (!state.running) break;
+      const other = cur === 'a' ? 'b' : 'a';
+      await streamTurn(other, true);
+      addSystemMsg('✓ Discuție încheiată. Ambii agenți și-au prezentat concluziile.');
+      state.running = false; state.ending = false;
+      break;
+    }
+
+    const maxSteps = cfg.maxSteps || 0;
+    if (maxSteps > 0 && state.stepCount >= maxSteps) {
+      addSystemMsg(`Pași maximi (${maxSteps}) atinși. Apasă "⏹ Încheie" sau oprește manual.`);
+      state.running = false; break;
+    }
+
+    const signalsDone = await streamTurn(cur, false);
+    if (!state.running) break;
+
+    if (signalsDone) {
+      consecutiveDone++;
+      const agentTurns = state.discussion.filter(e => e.role !== 'user').length;
+      if (consecutiveDone >= 2 && agentTurns >= 4) {
+        // Both agents in a row signaled "done" — trigger ending flow (final conclusions)
+        addSystemMsg('🤝 Agenții au semnalat că discuția este încheiată. Se generează concluziile finale...');
+        state.ending = true;
+        consecutiveDone = 0;
+        cur = cur === 'a' ? 'b' : 'a';  // advance so ending starts with next agent
+        continue;
+      } else if (consecutiveDone >= 2) {
+        // Too early (< 4 agent turns total) — reset silently and keep going
+        consecutiveDone = 0;
+      }
+    } else {
+      consecutiveDone = 0;
+    }
+
+    // Count step after second agent responds
+    const isSecond = cur !== (cfg.startAgent || 'a');
+    if (isSecond) {
+      state.stepCount++;
+      document.getElementById('step-counter').textContent = 'Pas ' + state.stepCount;
+    }
+
+    cur = cur === 'a' ? 'b' : 'a';
+  }
+}
+
+async function streamTurn(agKey, isFinal) {
+  const agName = cfg[agKey + 'Name'] || 'Agent ' + agKey.toUpperCase();
+  const msgs = buildContext(agKey, state.discussion);
+
+  if (isFinal) {
+    const signal = '\n\n[INSTRUCȚIUNE SISTEM: Acesta este ultimul tău turn. Prezintă concluzia finală a discuției.]';
+    const last = msgs[msgs.length - 1];
+    if (last && last.role === 'user') {
+      msgs[msgs.length - 1] = {...last, content: last.content + signal};
+    } else {
+      msgs.push({role: 'user', content: signal.trim()});
+    }
+  }
+
+  const wrap = createStreamingBubble(agKey, agName, state.stepCount);
+  let fullContent = '', thinkContent = '', thinkEl = null;
+
+  try {
+    for await (const chunk of apiStream(agKey, msgs, state.abortCtrl.signal)) {
+      if (chunk.error) { toast('Eroare ' + agName + ': ' + chunk.error, 'err'); break; }
+      if (chunk.thinking) {
+        thinkContent += chunk.thinking;
+        if (!thinkEl) thinkEl = ensureThinkBlock(wrap);
+        updateThinkBlock(thinkEl, thinkContent);
+      }
+      if (chunk.content) {
+        fullContent += chunk.content;
+        updateBubbleContent(wrap, fullContent);
+      }
+      if (chunk.done) break;
+    }
+  } catch(e) {
+    if (e.name === 'AbortError') { state.running = false; return; }
+    toast('Stream error: ' + e.message, 'err');
+  }
+
+  finalizeStreamingBubble(wrap);
+  if (fullContent) {
+    state.discussion.push({role: agKey, content: fullContent, step: state.stepCount});
+    updateCtxBar();
+  }
+  return _detectDone(fullContent);
+}
+
+// ─── PAUSE / INJECT ───
+function togglePause() {
+  if (!state.running) return;
+  if (state.paused) {
+    resumeDiscussion();
+  } else {
+    state.paused = true;
+    document.getElementById('inject-panel').classList.add('open');
+    document.getElementById('btn-pause').textContent = '▶ Continuă';
+    document.getElementById('btn-pause').classList.add('warn');
+  }
+}
+function resumeDiscussion() {
+  state.paused = false;
+  document.getElementById('inject-panel').classList.remove('open');
+  document.getElementById('btn-pause').textContent = '⏸ Pauză';
+  document.getElementById('btn-pause').classList.remove('warn');
+  document.getElementById('inject-ta').value = '';
+  if (_resumeResolve) { _resumeResolve(); _resumeResolve = null; }
+}
+function injectAndResume() {
+  const txt = document.getElementById('inject-ta').value.trim();
+  if (txt) {
+    const prefix = cfg.injectPrefix || '[Utilizator]:';
+    state.pendingInject = prefix + ' ' + txt;
+  }
+  resumeDiscussion();
+}
+function waitForResume() {
+  return new Promise(res => { _resumeResolve = res; });
+}
+
+function handleSend() {
+  const ta = document.getElementById('user-input');
+  const txt = ta.value.trim();
+  if (!txt) return;
+  if (state.running) {
+    const prefix = cfg.injectPrefix || '[Utilizator]:';
+    state.pendingInject = prefix + ' ' + txt;
+    addMessageToUI('user', txt, 'Tu (inject)');
+    ta.value = ''; ta.style.height = 'auto';
+  } else {
+    startDiscussion();
+  }
+}
+
+// ─── END DISCUSSION ───
+function endDiscussion() {
+  if (!state.running) return;
+  state.ending = true;
+  if (state.paused) resumeDiscussion();
+  addSystemMsg('⏹ Cerere de încheiere — agenții pregătesc concluziile...');
+}
+
+// ─── STOP ALL ───
+function stopAll() {
+  state.running = false; state.paused = false; state.ending = false;
+  if (state.abortCtrl) state.abortCtrl.abort();
+  if (_resumeResolve) { _resumeResolve(); _resumeResolve = null; }
+  setUIRunning(false);
+  addSystemMsg('⏹ Discuție oprită.');
+}
+
+// ─── SUMMARIZE ───
+function openSummModal() { document.getElementById('summ-modal').classList.add('open'); }
+function closeSummModal() { document.getElementById('summ-modal').classList.remove('open'); }
+async function doSummarize() {
+  closeSummModal();
+  await runSummarize(document.getElementById('summ-replace').checked);
+}
+async function runSummarize(replace) {
+  readCfgFromUI();
+  if (!cfg.sModel) { toast('Configurează modelul pentru agentul de sinteză', 'warn'); return; }
+  addSystemMsg('∑ Generez rezumat cu agentul de sinteză...');
+
+  const dialogue = state.discussion
+    .filter(e => e.role !== 'system')
+    .map(e => {
+      const n = e.role === 'user' ? (cfg.injectPrefix || 'Utilizator')
+                : e.role === 'a' ? cfg.aName : cfg.bName;
+      return `**${n}:**\n${e.content}`;
+    }).join('\n\n---\n\n');
+
+  const prompt = (cfg.sSynthPrompt || 'Sumarizează:\n\n{dialogue}').replace('{dialogue}', dialogue);
+  const msgs = [{role: 'user', content: prompt}];
+
+  const wrap = createStreamingBubble('s', cfg.sName || 'Sinteză', null);
+  let summary = '';
+  const ctrl = new AbortController();
+  try {
+    for await (const chunk of apiStream('s', msgs, ctrl.signal)) {
+      if (chunk.error) { toast('Eroare sinteză: ' + chunk.error, 'err'); break; }
+      if (chunk.content) { summary += chunk.content; updateBubbleContent(wrap, summary); }
+      if (chunk.done) break;
+    }
+  } catch(e) { toast('Eroare sinteză: ' + e.message, 'err'); }
+  finalizeStreamingBubble(wrap);
+
+  if (summary && replace) {
+    // Clear chat UI, keeping only the summary bubble
+    const messagesDiv = document.getElementById('messages');
+    [...messagesDiv.children].forEach(el => { if (el !== wrap) el.remove(); });
+    // Insert a system note before the summary bubble
+    const noteEl = document.createElement('div');
+    noteEl.className = 'sys-msg';
+    noteEl.textContent = '∑ Istoricul a fost înlocuit cu rezumatul de mai jos.';
+    messagesDiv.insertBefore(noteEl, wrap);
+
+    state.discussion = [
+      {role: 'system', content: '[Rezumat automat al discuției anterioare]'},
+      {role: 'user', content: '[REZUMAT ANTERIOR]\n' + summary, step: 0}
+    ];
+    state.warnedCtx = false;
+    document.getElementById('ctx-warn-banner').classList.remove('show');
+    updateCtxBar();
+  }
+}
+
+// ─── UI HELPERS ───
+function setUIRunning(on) {
+  const btnStart = document.getElementById('btn-start');
+  btnStart.textContent = on ? '⏹ Stop' : '▶ Start';
+  btnStart.className = 'tb-btn' + (on ? ' danger' : ' primary');
+  document.getElementById('btn-pause').disabled = !on;
+  document.getElementById('btn-end').disabled = !on;
+  if (!on) {
+    document.getElementById('inject-panel').classList.remove('open');
+    document.getElementById('btn-pause').textContent = '⏸ Pauză';
+    document.getElementById('btn-pause').classList.remove('warn');
+  }
+}
+
+function addSystemMsg(text) {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg system-msg';
+  wrap.innerHTML = `<div class="msg-bubble">${escHtml(text)}</div>`;
+  appendMsg(wrap);
+}
+
+function addMessageToUI(role, content, name) {
+  const cls = role === 'user' ? 'user' : role === 'a' ? 'agent-a' : role === 'b' ? 'agent-b' : 'agent-s';
+  const color = role === 'user' ? 'var(--accent)'
+               : role === 'a' ? 'var(--agent-a)'
+               : role === 'b' ? 'var(--agent-b)' : 'var(--accent)';
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ' + cls;
+  wrap.innerHTML = `<div class="msg-header"><span class="msg-name" style="color:${color}">${escHtml(name)}</span></div>
+<div class="msg-bubble md-content">${renderMd(content)}</div>`;
+  wrap.addEventListener('contextmenu', e => { e.preventDefault(); showCtxMenu(e, wrap); });
+  appendMsg(wrap);
+  renderMermaidIn(wrap);
+}
+
+function createStreamingBubble(agKey, agName, step) {
+  const cls = agKey === 'b' ? 'agent-b' : agKey === 's' ? 'agent-s' : 'agent-a';
+  const color = agKey === 'b' ? 'var(--agent-b)' : agKey === 's' ? 'var(--accent)' : 'var(--agent-a)';
+  const stepTxt = step != null ? `<span class="msg-step"> · pas ${step + 1}</span>` : '';
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ' + cls;
+  wrap.innerHTML = `<div class="msg-header"><span class="msg-name" style="color:${color}">${escHtml(agName)}</span>${stepTxt}</div>
+<div class="msg-bubble md-content typing-cursor"></div>`;
+  wrap.addEventListener('contextmenu', e => { e.preventDefault(); showCtxMenu(e, wrap); });
+  appendMsg(wrap);
+  return wrap;
+}
+
+function updateBubbleContent(wrap, text) {
+  const b = wrap.querySelector('.msg-bubble');
+  if (b) b.innerHTML = renderMd(text);
+  scrollToBottom();
+}
+
+function ensureThinkBlock(wrap) {
+  let th = wrap.querySelector('details.think-block');
+  if (!th) {
+    th = document.createElement('details');
+    th.className = 'think-block';
+    th.innerHTML = '<summary>Gândire internă</summary><pre></pre>';
+    const bubble = wrap.querySelector('.msg-bubble');
+    if (bubble) bubble.before(th);
+  }
+  return th;
+}
+
+function updateThinkBlock(el, text) {
+  const pre = el.querySelector('pre');
+  if (pre) pre.textContent = text;
+}
+
+function finalizeStreamingBubble(wrap) {
+  const b = wrap.querySelector('.msg-bubble');
+  if (b) b.classList.remove('typing-cursor');
+  renderMermaidIn(wrap);
+}
+
+function appendMsg(el) {
+  document.getElementById('messages').appendChild(el);
+  scrollToBottom();
+}
+function scrollToBottom() {
+  const c = document.getElementById('messages');
+  requestAnimationFrame(() => { c.scrollTop = c.scrollHeight; });
+}
+
+// ─── CONTEXT MENU ───
+function showCtxMenu(e, msgEl) {
+  _ctxTargetMsg = msgEl;
+  const m = document.getElementById('ctx-menu');
+  m.style.display = 'block';
+  m.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
+  m.style.top = Math.min(e.clientY, window.innerHeight - 130) + 'px';
+}
+document.addEventListener('click', () => {
+  document.getElementById('ctx-menu').style.display = 'none';
+});
+function doExportHtml() {
+  if (!_ctxTargetMsg) return;
+  document.getElementById('ctx-menu').style.display = 'none';
+  const includeThink = document.getElementById('ctx-include-think').checked;
+  const clone = _ctxTargetMsg.cloneNode(true);
+  if (!includeThink) { const tb = clone.querySelector('details.think-block'); if (tb) tb.remove(); }
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Export</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<style>body{font-family:'Segoe UI',sans-serif;background:#fff;color:#222;padding:20px;max-width:900px;margin:0 auto}
+.msg-header{margin-bottom:5px}.msg-name{font-weight:700;font-size:12px}
+.msg-bubble{padding:12px 16px;border-radius:8px;line-height:1.6;margin:4px 0}
+.agent-a .msg-bubble{background:#e8f4ff;border-left:4px solid #4a9eff}
+.agent-b .msg-bubble{background:#f3e8ff;border-left:4px solid #a855f7}
+.user .msg-bubble{background:#e8f4fd;border-left:4px solid #1565c0}
+pre{background:#f5f5f5;padding:10px;border-radius:6px;overflow-x:auto;font-size:12px}
+code{background:#f0f0f0;padding:1px 4px;border-radius:3px;font-family:monospace;font-size:.88em}
+table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:4px 9px}
+th{background:#f0f0f0}blockquote{border-left:3px solid #ccc;padding-left:10px;color:#555}
+</style></head><body>${clone.outerHTML}</body></html>`;
+  const a = document.createElement('a');
+  a.href = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
+  a.download = 'message_export.html';
+  a.click();
+}
+function copyMsgText() {
+  if (!_ctxTargetMsg) return;
+  document.getElementById('ctx-menu').style.display = 'none';
+  const text = _ctxTargetMsg.querySelector('.msg-bubble')?.innerText || '';
+  navigator.clipboard.writeText(text)
+    .then(() => toast('Copiat!', 'ok'))
+    .catch(() => toast('Eroare copiere', 'err'));
+}
+
+// ─── TOAST ───
+function toast(msg, type = '') {
+  const w = document.getElementById('toast-wrap');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.textContent = msg;
+  w.appendChild(el);
+  setTimeout(() => {
+    el.style.transition = 'opacity .3s';
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 300);
+  }, 3000);
+}
+
+// ─── MARKDOWN RENDERER ───
+const _saved = [];
+function _saveToken(html) { _saved.push(html); return `\x02${_saved.length - 1}\x03`; }
+function _restoreTokens(s) { return s.replace(/\x02(\d+)\x03/g, (_, i) => _saved[+i] || ''); }
+
+function _renderMath(tex, block) {
+  // Returns raw HTML (not a token) — callers already wrap in _saveToken
+  try {
+    return katex.renderToString(tex, {displayMode: block, throwOnError: false, output: 'html'});
+  } catch(e) {
+    return `<code>${escHtml(tex)}</code>`;
+  }
+}
+
+function escHtml(t) {
+  return String(t)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function sanitizeMermaid(code) {
+  return code
+    .replace(/[–—]/g, '--')
+    .replace(/₀/g,'0').replace(/₁/g,'1').replace(/₂/g,'2').replace(/₃/g,'3')
+    .replace(/₄/g,'4').replace(/₅/g,'5').replace(/₆/g,'6').replace(/₇/g,'7')
+    .replace(/₈/g,'8').replace(/₉/g,'9')
+    .replace(/⁰/g,'0').replace(/¹/g,'1').replace(/²/g,'2').replace(/³/g,'3')
+    .replace(/⁴/g,'4').replace(/⁵/g,'5').replace(/⁶/g,'6').replace(/⁷/g,'7')
+    .replace(/⁸/g,'8').replace(/⁹/g,'9')
+    // <br> after closing bracket: [Label]<br>extra → ["Label<br/>extra"]
+    .replace(/\[([^\]"<>]*)\]\s*<br\s*\/?>\s*([^\n]*)/g, (m, lbl, extra) => {
+      const ex = extra.trim();
+      if (!ex || /^[-]/.test(ex)) return m;
+      return `["${(lbl.trim() + '<br/>' + ex).replace(/"/g, "'")}"]`;
+    })
+    // <br> inside unquoted brackets: [text<br>more] → ["text<br/>more"]
+    .replace(/\[([^\]"<>]*)<br\s*\/?>([^\]"<>]*)\]/g, (_, a, b) =>
+      `["${(a.trim() + '<br/>' + b.trim()).replace(/"/g, "'")}"]`)
+    // remaining bare <br> → <br/>
+    .replace(/<br\s*>/g, '<br/>')
+    // Parentheses in unquoted node labels → quote them (else parsed as stadium nodes)
+    // e.g.  K[Tick (requestAnimationFrame)]  →  K["Tick (requestAnimationFrame)"]
+    .replace(/\[([^\]"]*[()][^\]"]*)\]/g, m =>
+      `["${m.slice(1,-1).replace(/"/g, "'")}"]`)
+    // Non-ASCII in unquoted node labels → quote them
+    .replace(/\[([^\]"]*[^\x00-\x7E][^\]"]*)\]/g, m =>
+      `["${m.slice(1,-1).replace(/"/g, "'")}"]`)
+    // Curly braces in unquoted labels (diamond nodes use {}, raw { inside [] breaks)
+    .replace(/\[([^\]"]*[{}][^\]"]*)\]/g, m =>
+      `["${m.slice(1,-1).replace(/"/g, "'")}"]`)
+    // Slash / backslash in unquoted labels
+    .replace(/\[([^\]"]*[/\\][^\]"]*)\]/g, m =>
+      `["${m.slice(1,-1).replace(/"/g, "'")}"]`)
+    // Remove stray closing brace on its own line (invalid in pie/xychart/etc.)
+    .replace(/^}\s*$/gm, '')
+    // Fix pie chart: remove wrapping curly braces if present
+    .replace(/^(pie\b.*)\n\{/gm, '$1');
+}
+
+async function renderMermaidIn(container) {
+  const blocks = container.querySelectorAll('.mmd-pending');
+  for (const block of blocks) {
+    block.classList.remove('mmd-pending');
+    const raw = block.dataset.raw || '';
+    const wrap = document.createElement('div');
+    wrap.className = 'mermaid-wrap';
+    try {
+      const id = 'mmd_' + Math.random().toString(36).slice(2);
+      const {svg} = await mermaid.render(id, sanitizeMermaid(raw));
+      wrap.innerHTML = svg;
+    } catch(e) {
+      wrap.className = 'mermaid-err';
+      wrap.innerHTML = `⚠ Mermaid error: ${escHtml(e.message)}<br><pre>${escHtml(raw)}</pre>`;
+    }
+    block.replaceWith(wrap);
+  }
+}
+
+function renderMd(text) {
+  if (!text) return '';
+  _saved.length = 0;
+  let s = String(text);
+
+  // Phase 0: fenced code blocks
+  s = s.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    const l = (lang || '').toLowerCase().trim();
+    if (l === 'mermaid') {
+      return _saveToken(`<div class="mmd-pending" data-raw="${escHtml(code.trim())}"></div>`);
+    }
+    if ((l === 'svg' || l === 'xml') && code.trim().startsWith('<svg')) {
+      return _saveToken(`<div class="svg-wrap">${code.trim()}</div>`);
+    }
+    if (l === 'html') {
+      const encoded = encodeURIComponent(code.trim());
+      return _saveToken(
+        `<div class="html-code-wrap">` +
+        `<div class="html-code-toolbar"><span class="html-code-badge">HTML</span>` +
+        `<button class="run-html-btn" onclick="openHtmlTab(decodeURIComponent(this.dataset.src))" ` +
+        `data-src="${escHtml(encoded)}" title="Deschide în tab nou">▶ Run ↗</button></div>` +
+        `<pre><code class="lang-html">${escHtml(code)}</code></pre></div>`
+      );
+    }
+    return _saveToken(`<pre><code class="lang-${escHtml(l)}">${escHtml(code)}</code></pre>`);
+  });
+  // Inline code
+  s = s.replace(/`([^`\n]+)`/g, (_, c) => _saveToken(`<code>${escHtml(c)}</code>`));
+
+  // Phase 0b: inline SVG written directly (without code fence) — must run before \n→<br>
+  // Captures <svg ...>...</svg> multiline and saves as token to prevent fragmentation
+  s = s.replace(/<svg[\s\S]*?<\/svg>/gi, match =>
+    _saveToken(`<div class="svg-wrap">${match}</div>`)
+  );
+
+  // Phase 1: math
+  s = s.replace(/\\\$/g, '\x01DOLLAR\x01');
+  s = s.replace(/\$\$([\s\S]+?)\$\$/g, (_, m) => _saveToken(`<div class="math-block">${_renderMath(m, true)}</div>`));
+  s = s.replace(/\\\[([\s\S]+?)\\\]/g, (_, m) => _saveToken(`<div class="math-block">${_renderMath(m, true)}</div>`));
+  s = s.replace(/(?:^|\n)\$[ \t]*\n([\s\S]+?)\n\$[ \t]*(?=\n|$)/g,
+    (_, m) => '\n' + _saveToken(`<div class="math-block">${_renderMath(m.trim(), true)}</div>`) + '\n');
+  s = s.replace(/\\\(([^]*?)\\\)/g, (_, m) => _saveToken(_renderMath(m, false)));
+  s = s.replace(/(?<![\\$])\$([^$\n]+?)(?<!\\)\$(?!\$)/g, (_, m) => _saveToken(_renderMath(m, false)));
+  s = s.replace(/\x01DOLLAR\x01/g, '$');
+
+  // Phase 2: headings
+  s = s.replace(/^(#{1,6})\s+(.+)$/gm, (_, h, t) => `<h${h.length}>${t}</h${h.length}>`);
+
+  // Phase 3: HR
+  s = s.replace(/^(?:---|\*\*\*|___)\s*$/gm, '<hr>');
+
+  // Phase 4: blockquote
+  s = s.replace(/^>\s*(.*)$/gm, '<blockquote>$1</blockquote>');
+
+  // Phase 5: tables
+  s = s.replace(/^\|.+\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/gm, tbl => {
+    const lines = tbl.split('\n').filter(l => l.trim());
+    if (lines.length < 2) return tbl;
+    const hdCells = lines[0].split('|').filter((_, i, a) => i > 0 && i < a.length - 1)
+      .map(c => `<th>${c.trim()}</th>`).join('');
+    const body = lines.slice(2).filter(l => l.trim()).map(l =>
+      '<tr>' + l.split('|').filter((_, i, a) => i > 0 && i < a.length - 1)
+        .map(c => `<td>${c.trim()}</td>`).join('') + '</tr>'
+    ).join('');
+    return `<table><thead><tr>${hdCells}</tr></thead><tbody>${body}</tbody></table>`;
+  });
+
+  // Phase 6: lists
+  s = s.replace(/((?:^[ \t]*[-*+] .+\n?)+)/gm, block => {
+    const items = block.trim().split('\n').map(l => '<li>' + l.replace(/^[ \t]*[-*+] /, '').trim() + '</li>');
+    return '<ul>' + items.join('') + '</ul>';
+  });
+  s = s.replace(/((?:^[ \t]*\d+\. .+\n?)+)/gm, block => {
+    const items = block.trim().split('\n').map(l => '<li>' + l.replace(/^[ \t]*\d+\. /, '').trim() + '</li>');
+    return '<ol>' + items.join('') + '</ol>';
+  });
+
+  // Phase 7: inline formatting
+  s = s.replace(/\*\*\*([^*\n]+)\*\*\*/g, '<strong><em>$1</em></strong>');
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+  s = s.replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+  // Phase 8: paragraphs
+  s = s.replace(/\n\n+/g, '</p><p>');
+  s = s.replace(/\n/g, '<br>');
+  s = '<p>' + s + '</p>';
+
+  // Unwrap block elements from <p>
+  s = s.replace(/<p>(<\/?(h[1-6]|hr|table|ul|ol|blockquote|div)[^>]*>)/g, '$1');
+  s = s.replace(/(<\/?(h[1-6]|hr|table|ul|ol|blockquote|div)[^>]*>)<\/p>/g, '$1');
+  s = s.replace(/<p>(\x02\d+\x03)<\/p>/g, '$1');
+  s = s.replace(/<p><\/p>/g, '');
+
+  // ── SPACING CLEANUP ──
+  // Remove stray <br> immediately after a block-closing tag
+  //   e.g. <hr><br><h2> → <hr><h2>  /  </table><br> → </table>
+  s = s.replace(
+    /((?:<\/(?:h[1-6]|table|ul|ol|blockquote|div|pre)>|<hr>|<div[^>]*>))(\s*<br\s*\/?>\s*)+/g,
+    '$1'
+  );
+  // Remove stray <br> immediately before a block-opening tag
+  //   e.g. <br><h2> → <h2>
+  s = s.replace(
+    /(\s*<br\s*\/?>\s*)+((?:<(?:h[1-6]|table|ul|ol|blockquote|div|pre|hr)[^>]*>|\x02\d+\x03))/g,
+    '$2'
+  );
+  // Remove paragraphs that contain only <br> tags (pure whitespace paragraphs)
+  s = s.replace(/<p>(\s*<br\s*\/?>\s*)+<\/p>/g, '');
+
+  return _restoreTokens(s);
+}
+
+// ─── HTML RUNNER (opens in new tab) ───
+
+// Error-catching wrapper injected into every iframe
+const _IFRAME_ERROR_OVERLAY = `
+<style>
+#__err{display:none;position:fixed;bottom:0;left:0;right:0;background:#1a0000;
+  border-top:2px solid #f44336;color:#ff6b6b;font-family:monospace;font-size:12px;
+  padding:8px 12px;max-height:40%;overflow-y:auto;z-index:99999;white-space:pre-wrap}
+#__err summary{cursor:pointer;color:#ff9999;font-weight:bold;margin-bottom:4px;list-style:none}
+#__err summary::before{content:'⚠ JS Error — '}
+</style>
+<details id="__err"><summary></summary><pre id="__err_body"></pre></details>
+<script>
+(function(){
+  var el=document.getElementById('__err');
+  var body=document.getElementById('__err_body');
+  function show(msg,src,line,col,err){
+    el.style.display='block'; el.open=true;
+    var full=err?err.stack||err.toString():msg;
+    document.querySelector('#__err summary').textContent=(src||'')+(line?':'+line:'');
+    body.textContent=full;
+  }
+  window.onerror=function(m,s,l,c,e){show(m,s,l,c,e);return false};
+  window.addEventListener('unhandledrejection',function(e){
+    show(e.reason&&e.reason.message||String(e.reason),'Promise',null,null,e.reason)
+  });
+})();
+<\/script>`;
+
+function _prepareHtml(raw) {
+  const trimmed = raw.trim();
+  // Already a full document
+  if (/^<!DOCTYPE\s|^<html[\s>]/i.test(trimmed)) {
+    // Inject error overlay just after <body> (or before </body> fallback)
+    if (/<body[\s>]/i.test(trimmed)) {
+      return trimmed.replace(/(<body[^>]*>)/i, '$1\n' + _IFRAME_ERROR_OVERLAY);
+    }
+    return trimmed + _IFRAME_ERROR_OVERLAY;
+  }
+  // Fragment — wrap in a proper document
+  return `<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #fff; color: #222; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+${_IFRAME_ERROR_OVERLAY}
+${trimmed}
+</body>
+</html>`;
+}
+
+function openHtmlTab(code) {
+  const blob = new Blob([_prepareHtml(code)], {type: 'text/html'});
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 15000);
+}
+
+// ─── CLEAR CONVERSATION ───
+function clearConversation() {
+  if (state.running) {
+    if (!confirm('Discuția este în curs. O oprești și ștergi tot?')) return;
+    stopAll();
+  } else if (state.discussion.length > 0) {
+    if (!confirm('Ștergi conversația curentă? Acțiunea nu poate fi anulată.')) return;
+  }
+  state.discussion = [];
+  state.stepCount = 0;
+  state.warnedCtx = false;
+  document.getElementById('messages').innerHTML = '';
+  document.getElementById('step-counter').textContent = 'Pas 0';
+  document.getElementById('ctx-bar-fill').style.width = '0%';
+  document.getElementById('ctx-bar-label').textContent = 'Context: 0%';
+  document.getElementById('ctx-warn-banner').classList.remove('show');
+  toast('Conversație ștearsă', 'ok');
+}
+
+// ─── SAVE / LOAD SESSION ───
+
+async function saveSession() {
+  readCfgFromUI();
+
+  const now = new Date();
+  const ts = now.toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
+  const stepInfo = `Pas ${state.stepCount}`;
+
+  const sessionData = {
+    version: '2',
+    savedAt: now.toISOString(),
+    appName: 'AI Discussion v2',
+    stepCount: state.stepCount,
+    discussion: state.discussion,
+  };
+
+  const settingsData = {...cfg};
+
+  const readme = [
+    'AI Discussion v2 — Session Snapshot',
+    '=====================================',
+    `Salvat: ${now.toLocaleString('ro-RO')}`,
+    `Pași: ${state.stepCount}`,
+    `Mesaje în discuție: ${state.discussion.length}`,
+    `Agent A: ${cfg.aName} (${cfg.aProvider} / ${cfg.aModel || 'N/A'})`,
+    `Agent B: ${cfg.bName} (${cfg.bProvider} / ${cfg.bModel || 'N/A'})`,
+    '',
+    'Fișiere:',
+    '  session.json  — istoricul discuției',
+    '  settings.json — toate setările (API keys incluse!)',
+    '',
+    'ATENȚIE: settings.json poate conține API keys.',
+    'Nu distribui acest ZIP în mod public.',
+  ].join('\n');
+
+  try {
+    const zip = new JSZip();
+    zip.file('session.json',  JSON.stringify(sessionData,  null, 2));
+    zip.file('settings.json', JSON.stringify(settingsData, null, 2));
+    zip.file('README.txt', readme);
+
+    const blob = await zip.generateAsync({
+      type: 'blob',
+      compression: 'DEFLATE',
+      compressionOptions: {level: 6},
+    });
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ai-discussion_${ts}.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    toast(`Sesiune salvată: ai-discussion_${ts}.zip`, 'ok');
+  } catch(e) {
+    toast('Eroare la salvare: ' + e.message, 'err');
+  }
+}
+
+async function loadSession(input) {
+  const file = input.files[0];
+  input.value = '';   // reset so same file can be reloaded
+  if (!file) return;
+
+  try {
+    toast('Se încarcă sesiunea...');
+    const zip = await JSZip.loadAsync(file);
+
+    // ── settings.json ──
+    const settingsFile = zip.file('settings.json');
+    if (settingsFile) {
+      const raw = await settingsFile.async('string');
+      const loaded = JSON.parse(raw);
+      cfg = {...DEFAULTS, ...loaded};
+      applyCfgToUI();
+      applyColors();
+      saveCfg();
+    }
+
+    // ── session.json ──
+    const sessionFile = zip.file('session.json');
+    if (sessionFile) {
+      const raw = await sessionFile.async('string');
+      const session = JSON.parse(raw);
+
+      if (session.version !== '2') {
+        toast('Format de sesiune necunoscut (versiune ' + session.version + ')', 'warn');
+      }
+
+      // Stop any running discussion
+      if (state.running) stopAll();
+
+      // Restore state
+      state.discussion = session.discussion || [];
+      state.stepCount  = session.stepCount  || 0;
+      state.warnedCtx  = false;
+
+      document.getElementById('step-counter').textContent = 'Pas ' + state.stepCount;
+      document.getElementById('ctx-warn-banner').classList.remove('show');
+
+      // Re-render all messages
+      _rebuildMessagesUI();
+      updateCtxBar();
+
+      const savedAt = session.savedAt ? new Date(session.savedAt).toLocaleString('ro-RO') : '?';
+      toast(`Sesiune restaurată (${state.discussion.length} intrări, salvat ${savedAt})`, 'ok');
+    }
+  } catch(e) {
+    toast('Eroare la încărcare: ' + e.message, 'err');
+    console.error(e);
+  }
+}
+
+function _rebuildMessagesUI() {
+  const container = document.getElementById('messages');
+  container.innerHTML = '';
+
+  for (const entry of state.discussion) {
+    if (entry.role === 'system') {
+      addSystemMsg(entry.content);
+      continue;
+    }
+    const name = entry.role === 'user'
+      ? 'Tu'
+      : entry.role === 'a' ? (cfg.aName || 'Agent A')
+      : (cfg.bName || 'Agent B');
+    addMessageToUI(entry.role, entry.content, name);
+  }
+
+  addSystemMsg('📂 Sesiune restaurată din snapshot.');
+}
+
+// ─── INPUT RESIZE + ENTER ───
+const _uInput = document.getElementById('user-input');
+_uInput.addEventListener('input', () => {
+  _uInput.style.height = 'auto';
+  _uInput.style.height = Math.min(_uInput.scrollHeight, 200) + 'px';
+});
+_uInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+});
+
+// ─── INIT ───
+loadCfg();
+fetch('/api/settings').then(r => r.json()).then(d => {
+  if (d && Object.keys(d).length > 0) {
+    cfg = {...cfg, ...d};
+    applyCfgToUI();
+    applyColors();
+  }
+}).catch(() => {});
+</script>
+</body>
+</html>

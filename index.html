@@ -1,0 +1,2588 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Discussion v2</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0d0d;--bg2:#161616;--bg3:#1e1e1e;--bg4:#2a2a2a;
+  --border:#333;--border2:#444;
+  --text:#e0e0e0;--text2:#aaa;--text3:#777;
+  --accent:#4a9eff;--accent2:#2d7dd2;
+  --green:#4caf50;--red:#f44336;--orange:#ff9800;--yellow:#ffd600;
+  --user-bg:#0e3a5c;--user-border:#1565c0;
+  --sys-bg:#1a1a0a;--sys-border:#555522;
+  --radius:8px;--radius2:12px;
+  --shadow:0 2px 12px rgba(0,0,0,.5);
+  --agent-a:#4a9eff;--agent-b:#a855f7;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px}
+
+/* ── LAYOUT ── */
+#app{display:flex;flex-direction:column;height:100vh}
+#topbar{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;min-height:44px}
+#main{flex:1;display:flex;overflow:hidden}
+#chat-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+#input-row{flex-shrink:0;padding:10px 12px;background:var(--bg2);border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end}
+
+/* ── TOPBAR ── */
+#topbar h1{font-size:15px;font-weight:700;color:var(--accent);white-space:nowrap}
+.tb-sep{width:1px;height:24px;background:var(--border);margin:0 4px}
+#step-counter{font-size:12px;color:var(--text2);white-space:nowrap}
+#ctx-bar-wrap{flex:1;min-width:60px;max-width:200px}
+#ctx-bar-label{font-size:11px;color:var(--text3);margin-bottom:2px}
+#ctx-bar{height:4px;background:var(--bg4);border-radius:2px;overflow:hidden}
+#ctx-bar-fill{height:100%;background:var(--green);border-radius:2px;transition:width .3s,background .3s;width:0%}
+.tb-spacer{flex:1}
+.tb-btn{padding:5px 11px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg3);color:var(--text);cursor:pointer;font-size:12px;white-space:nowrap;transition:background .15s}
+.tb-btn:hover{background:var(--bg4)}
+.tb-btn.primary{background:var(--accent2);border-color:var(--accent);color:#fff}
+.tb-btn.primary:hover{background:var(--accent)}
+.tb-btn.danger{background:#3a1010;border-color:var(--red);color:var(--red)}
+.tb-btn.danger:hover{background:#5a1515}
+.tb-btn.warn{background:#3a2800;border-color:var(--orange);color:var(--orange)}
+.tb-btn.warn:hover{background:#5a3c00}
+.tb-btn:disabled{opacity:.4;cursor:default}
+.tb-btn.active{background:rgba(34,197,94,.12);border-color:#22c55e;color:#22c55e}
+.tb-btn.active:hover{background:rgba(34,197,94,.22)}
+
+/* ── SETTINGS OVERLAY ── */
+#settings-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100;display:none;flex-direction:column}
+#settings-overlay.open{display:flex}
+#settings-header{display:flex;align-items:center;padding:10px 16px;background:var(--bg2);border-bottom:1px solid var(--border);gap:10px;flex-shrink:0}
+#settings-header h2{font-size:15px;font-weight:700;color:var(--accent);flex:1}
+#settings-tabs{display:flex;gap:4px}
+.stab{padding:5px 14px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg3);color:var(--text2);cursor:pointer;font-size:12px}
+.stab.active{background:var(--accent2);border-color:var(--accent);color:#fff}
+#settings-body{flex:1;overflow-y:auto;padding:16px}
+.spage{display:none}
+.spage.agents-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.spage.single-col{display:block}
+.agent-col{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius2);padding:14px;display:flex;flex-direction:column;gap:10px}
+.agent-col-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px}
+.frow{display:flex;flex-direction:column;gap:4px}
+.frow label{font-size:11px;color:var(--text2)}
+.frow input,.frow select,.frow textarea{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);padding:6px 9px;font-size:13px;width:100%}
+.frow textarea{resize:vertical;min-height:80px;font-family:inherit}
+.frow input[type=color]{padding:2px 4px;height:32px;cursor:pointer;border-radius:4px}
+.frow input[type=range]{padding:0}
+.model-row{display:flex;gap:6px}
+.model-row select{flex:1}
+.fetch-btn{padding:5px 10px;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);cursor:pointer;font-size:12px;white-space:nowrap}
+.fetch-btn:hover{background:var(--border2)}
+.manual-model-row{display:flex;gap:6px;margin-top:4px}
+.manual-model-row input{flex:1;font-size:12px}
+.srow{display:flex;align-items:center;justify-content:space-between}
+.srow label:first-child{font-size:12px;color:var(--text2)}
+.toggle{position:relative;width:38px;height:20px;cursor:pointer;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0}
+.slider{position:absolute;inset:0;background:var(--bg4);border-radius:10px;transition:.2s}
+.slider::before{content:'';position:absolute;width:14px;height:14px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+.toggle input:checked+.slider{background:var(--accent2)}
+.toggle input:checked+.slider::before{transform:translateX(18px)}
+.section-divider{height:1px;background:var(--border);margin:4px 0}
+.global-settings{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius2);padding:14px;display:flex;flex-direction:column;gap:10px;max-width:500px}
+.global-settings h3{font-size:13px;font-weight:700;color:var(--text2);margin-bottom:4px}
+.spage.ws-layout{display:flex;flex-direction:column;gap:16px}
+.ws-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:start}
+.ws-prompts{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-items:start}
+.ws-col{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius2);padding:14px;display:flex;flex-direction:column;gap:10px}
+.ws-col h3{font-size:13px;font-weight:700;color:var(--text2);margin-bottom:4px}
+.ws-prompt-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius2);padding:14px;display:flex;flex-direction:column;gap:6px}
+.ws-prompt-card h4{font-size:12px;font-weight:700;color:var(--text2);margin:0}
+.ws-prompt-card .prompt-vars{font-size:10px;color:var(--text3)}
+.ws-prompt-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ws-prompt-card textarea{resize:vertical;min-height:120px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);padding:6px 9px;font-size:12px;font-family:inherit;width:100%;box-sizing:border-box}
+.btn-fs{padding:3px 8px;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text3);cursor:pointer;font-size:11px;flex-shrink:0}
+.btn-fs:hover{color:var(--text);background:var(--border2)}
+#prompt-fs-overlay{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;display:none;flex-direction:column;padding:20px;gap:12px}
+#prompt-fs-overlay.open{display:flex}
+#prompt-fs-header{display:flex;align-items:center;gap:10px;flex-shrink:0}
+#prompt-fs-title{font-size:14px;font-weight:700;color:var(--accent);flex:1}
+#prompt-fs-vars{font-size:11px;color:var(--text3)}
+#prompt-fs-textarea{flex:1;resize:none;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius2);color:var(--text);padding:12px;font-size:13px;font-family:inherit;line-height:1.6}
+
+/* ── MESSAGES ── */
+.msg{display:flex;flex-direction:column;max-width:80%;animation:fadeIn .2s}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.msg.user{align-self:flex-end}
+.msg.agent-a,.msg.agent-b,.msg.agent-s{align-self:flex-start}
+.msg.system-msg{align-self:center;max-width:90%}
+.msg-header{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px;color:var(--text3)}
+.msg-name{font-weight:700;font-size:12px}
+.msg-step{font-size:10px;opacity:.7}
+.msg-time{font-size:10px;color:var(--text3);margin-left:auto;opacity:.7}
+.msg-bubble{padding:10px 14px;border-radius:var(--radius2);line-height:1.6;word-break:break-word}
+.msg.user .msg-bubble{background:var(--user-bg);border:1px solid var(--user-border);border-radius:var(--radius2) var(--radius2) 2px var(--radius2)}
+.msg.agent-a .msg-bubble{background:var(--bg3);border-radius:2px var(--radius2) var(--radius2) var(--radius2);border-left:3px solid var(--agent-a)}
+.msg.agent-b .msg-bubble{background:var(--bg3);border-radius:2px var(--radius2) var(--radius2) var(--radius2);border-left:3px solid var(--agent-b)}
+.msg.agent-s .msg-bubble{background:var(--bg3);border-radius:2px var(--radius2) var(--radius2) var(--radius2);border-left:3px solid var(--accent)}
+.msg.ws-result .msg-bubble{background:rgba(34,197,94,.06);border-radius:2px var(--radius2) var(--radius2) var(--radius2);border-left:3px solid #22c55e}
+.ws-result-header{font-size:11px;font-weight:600;color:#22c55e;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.ws-result-source{font-size:10px;color:var(--text3);margin-bottom:8px}
+.ws-result-source a{color:var(--accent);text-decoration:none}.ws-result-source a:hover{text-decoration:underline}
+.msg.system-msg .msg-bubble{background:var(--sys-bg);border:1px solid var(--sys-border);border-radius:var(--radius);font-size:12px;color:var(--text2);text-align:center;padding:6px 14px}
+details.think-block{background:rgba(255,255,255,.04);border-left:3px solid var(--text3);border-radius:4px;padding:6px 10px;margin-bottom:8px}
+details.think-block summary{font-size:11px;font-weight:600;color:var(--text3);cursor:pointer;list-style:none;display:flex;align-items:center;gap:4px}
+details.think-block summary::before{content:'▶';font-size:9px;transition:.15s}
+details.think-block[open] summary::before{content:'▼'}
+details.think-block pre{font-size:11px;color:var(--text3);white-space:pre-wrap;margin-top:6px}
+.typing-cursor::after{content:'▋';animation:blink .7s infinite;color:var(--accent)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* ── INPUT ROW ── */
+#user-input{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius2);color:var(--text);padding:9px 12px;font-size:13px;font-family:inherit;resize:none;min-height:42px;max-height:200px;line-height:1.5}
+#user-input:focus{outline:none;border-color:var(--accent2)}
+.send-btn{padding:9px 16px;border-radius:var(--radius2);border:none;background:var(--accent2);color:#fff;cursor:pointer;font-size:13px;font-weight:600;transition:background .15s;min-height:42px;align-self:flex-end;white-space:nowrap}
+.send-btn:hover{background:var(--accent)}
+.send-btn:disabled{opacity:.4;cursor:default}
+
+/* ── PAUSE / INJECT ── */
+#inject-panel{padding:10px 12px;background:var(--bg2);border-top:1px solid var(--border);display:none;flex-direction:column;gap:8px;flex-shrink:0}
+#inject-panel.open{display:flex}
+#inject-label{font-size:12px;color:var(--orange);font-weight:600}
+#inject-ta{background:var(--bg3);border:1px solid var(--orange);border-radius:var(--radius);color:var(--text);padding:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:60px}
+.inject-btns{display:flex;gap:8px}
+
+/* ── CTX WARNING ── */
+#ctx-warn-banner{display:none;padding:8px 14px;background:#3a2800;border-bottom:1px solid var(--orange);color:var(--orange);font-size:12px;flex-shrink:0;align-items:center;gap:8px}
+#ctx-warn-banner.show{display:flex}
+#ctx-warn-banner button{margin-left:auto;padding:3px 10px;border-radius:var(--radius);border:1px solid var(--orange);background:transparent;color:var(--orange);cursor:pointer;font-size:12px}
+
+/* ── TOAST ── */
+#toast-wrap{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:9999;pointer-events:none}
+.toast{padding:9px 14px;border-radius:var(--radius);background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:13px;box-shadow:var(--shadow);animation:toastIn .2s;pointer-events:auto}
+.toast.ok{border-color:var(--green);color:var(--green)}
+.toast.err{border-color:var(--red);color:var(--red)}
+.toast.warn{border-color:var(--orange);color:var(--orange)}
+@keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+
+/* ── HTML CODE BLOCK ── */
+.html-code-wrap{margin:.4em 0;border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden}
+.html-code-toolbar{display:flex;align-items:center;justify-content:space-between;padding:4px 10px;background:var(--bg4);border-bottom:1px solid var(--border)}
+.html-code-badge{font-size:11px;font-weight:700;color:var(--orange);font-family:monospace}
+.run-html-btn{padding:3px 10px;border-radius:var(--radius);border:1px solid var(--green);background:rgba(76,175,80,.12);color:var(--green);cursor:pointer;font-size:12px;font-weight:600;transition:background .15s}
+.run-html-btn:hover{background:rgba(76,175,80,.25)}
+.html-code-wrap pre{margin:0;border-radius:0;border:none}
+
+/* (html runner modal removed — opens in new tab) */
+
+/* ── CONTEXT MENU ── */
+#ctx-menu{position:fixed;z-index:1000;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:4px 0;box-shadow:var(--shadow);display:none;min-width:200px}
+.msg.selected-for-export{outline:2px solid #f39c12;outline-offset:2px;border-radius:var(--radius2)}
+#export-badge{display:none;position:absolute;top:-5px;right:-5px;background:#f39c12;color:#000;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;text-align:center;line-height:16px;padding:0 3px}
+#export-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;display:none}
+#export-modal-overlay.open{display:block}
+#export-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:301;background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:22px 26px;width:340px;display:none}
+#export-modal.open{display:block}
+#export-modal h3{margin:0 0 6px;color:#f39c12;font-size:15px}
+#export-modal .ex-count{font-size:12px;color:var(--text3);margin-bottom:16px}
+#export-modal .ex-group{margin-bottom:14px}
+#export-modal .ex-group label.ex-title{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px}
+#export-modal .ex-radios{display:flex;gap:16px}
+#export-modal .ex-radios label{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text)}
+#export-modal .ex-btns{display:flex;gap:10px;margin-top:18px}
+#export-modal .ex-btns button{flex:1;padding:8px;border:none;border-radius:var(--radius);cursor:pointer;font-size:13px;font-weight:600}
+#do-export-btn{background:#f39c12;color:#000}
+#do-export-btn:hover{background:#e08e0b}
+#do-export-btn:disabled{opacity:.5;cursor:default}
+#cancel-export-btn{background:var(--bg4);color:var(--text)}
+.ctx-item{padding:7px 14px;cursor:pointer;font-size:13px;color:var(--text)}
+.ctx-item:hover{background:var(--bg4)}
+.ctx-sep{height:1px;background:var(--border);margin:3px 0}
+.ctx-check-row{display:flex;align-items:center;gap:8px;padding:6px 14px;font-size:12px;color:var(--text2);cursor:pointer}
+
+/* ── SUMMARIZE MODAL ── */
+#summ-modal{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:200;display:none;align-items:center;justify-content:center}
+#summ-modal.open{display:flex}
+.summ-box{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius2);padding:20px;width:480px;max-width:95vw;display:flex;flex-direction:column;gap:14px}
+.summ-box h3{font-size:15px;font-weight:700;color:var(--accent)}
+.summ-box p{font-size:13px;color:var(--text2);line-height:1.5}
+.summ-box label{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer}
+.summ-btns{display:flex;gap:8px;justify-content:flex-end}
+
+/* ── MARKDOWN CONTENT ── */
+.md-content{overflow-wrap:break-word}
+.md-content h1,.md-content h2,.md-content h3{color:#7aa5d2;margin:.5em 0 .3em}
+.md-content h1{font-size:1.3em}.md-content h2{font-size:1.15em}.md-content h3{font-size:1.05em}
+.md-content p{margin:.3em 0}
+.md-content code{background:rgba(0,0,0,.3);padding:1px 5px;border-radius:3px;font-family:'Courier New',monospace;font-size:.88em;color:#ce9178}
+.md-content pre{background:rgba(0,0,0,.4);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;overflow-x:auto;margin:.4em 0}
+.md-content pre code{background:none;padding:0;color:#d4d4d4;font-size:.85em}
+.md-content ul,.md-content ol{padding-left:1.4em;margin:.2em 0}
+.md-content li{margin:.1em 0}
+.md-content blockquote{border-left:3px solid var(--border2);padding-left:10px;color:var(--text2);margin:.3em 0}
+.md-content table{border-collapse:collapse;margin:.4em 0;width:100%;font-size:.9em}
+.md-content th,.md-content td{border:1px solid var(--border2);padding:4px 9px}
+.md-content th{background:rgba(255,255,255,.07);font-weight:600}
+.md-content a{color:var(--accent)}
+.md-content hr{border:none;border-top:1px solid var(--border);margin:.5em 0}
+.md-content .math-block{overflow-x:auto;text-align:center;margin:.4em 0;padding:.3em 0}
+.mermaid-wrap{margin:.4em 0;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:var(--radius);padding:10px;overflow-x:auto;text-align:center}
+.mermaid-wrap svg{max-width:100%;height:auto}
+.mermaid-wrap .node rect,.mermaid-wrap .node circle,.mermaid-wrap .node ellipse,.mermaid-wrap .node polygon,.mermaid-wrap .node path{overflow:visible}
+.mermaid-err{color:var(--red);font-size:11px;background:rgba(244,67,54,.1);border:1px solid var(--red);border-radius:var(--radius);padding:8px;margin:.4em 0}
+.svg-wrap{margin:.4em 0;overflow-x:auto}
+
+/* ── WEB SEARCH CHIP ── */
+.ws-chip{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;border:1px solid var(--border2);background:var(--bg3);cursor:pointer;font-size:12px;color:var(--text2);transition:all .2s;white-space:nowrap;user-select:none}
+.ws-chip:hover{border-color:var(--accent);color:var(--text)}
+.ws-chip.active{border-color:#22c55e;color:#22c55e;background:rgba(34,197,94,.08)}
+.ws-chip.active .ws-chip-dot{animation:ws-pulse 1s ease-in-out infinite}
+.ws-chip-dot{width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0}
+.ws-chip.active .ws-chip-dot{background:#22c55e}
+@keyframes ws-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+
+/* ── WEB SEARCH MODAL ── */
+#ws-modal{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:200;display:none;align-items:center;justify-content:center}
+#ws-modal.open{display:flex}
+#ws-modal-box{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;width:560px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;overflow:hidden}
+#ws-modal-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+#ws-modal-header h3{flex:1;font-size:14px;font-weight:700;color:var(--text)}
+.ws-steps{padding:14px 18px;display:flex;flex-direction:column;gap:6px;border-bottom:1px solid var(--border)}
+.ws-step{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text3)}
+.ws-step.active{color:var(--text)}
+.ws-step.done{color:#22c55e}
+.ws-step.skipped{color:var(--text3);opacity:.5}
+.ws-step-icon{width:18px;height:18px;border-radius:50%;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;background:var(--bg3)}
+.ws-step.active .ws-step-icon{border-color:#f59e0b;color:#f59e0b;animation:ws-spin .8s linear infinite}
+.ws-step.done .ws-step-icon{border-color:#22c55e;background:rgba(34,197,94,.15);color:#22c55e}
+.ws-step.skipped .ws-step-icon{opacity:.4}
+@keyframes ws-spin{to{transform:rotate(360deg)}}
+#ws-query-display{padding:8px 18px;font-size:11px;color:var(--text2);background:var(--bg3);border-bottom:1px solid var(--border)}
+#ws-log{flex:1;overflow-y:auto;padding:10px 18px;font-size:11px;font-family:monospace;color:var(--text2);line-height:1.6;min-height:80px;max-height:200px}
+#ws-result-row{padding:10px 18px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);display:none}
+#ws-result-row.show{display:block}
+.ws-source-link{color:var(--accent);text-decoration:none}
+.ws-source-link:hover{text-decoration:underline}
+#ws-modal-footer{padding:10px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <h1>AI Discussion v2</h1>
+  <div class="tb-sep"></div>
+  <span id="step-counter">Pas 0</span>
+  <div class="tb-sep"></div>
+  <div id="ctx-bar-wrap">
+    <div id="ctx-bar-label">Context: 0%</div>
+    <div id="ctx-bar"><div id="ctx-bar-fill"></div></div>
+  </div>
+  <div class="tb-spacer"></div>
+  <button class="tb-btn" id="btn-hil" onclick="toggleHumanInLoop()" title="Human-in-loop: pauză automată după fiecare turn de agent">🧑 H-in-L</button>
+  <button class="tb-btn" id="btn-pause" onclick="togglePause()" disabled>⏸ Pauză</button>
+  <button class="tb-btn warn" id="btn-end" onclick="endDiscussion()" disabled>⏹ Încheie</button>
+  <button class="tb-btn" id="btn-export-chat" onclick="openExportFromBtn()" title="Exportează mesajele selectate (PDF/DOCX)" style="position:relative">📤 Export<span id="export-badge"></span></button>
+  <button class="tb-btn" id="btn-summ" onclick="openSummModal()">∑ Sumarizează</button>
+  <button class="tb-btn" id="btn-clear" onclick="clearConversation()" title="Șterge conversația curentă">🗑 Șterge</button>
+  <button class="tb-btn primary" id="btn-start" onclick="handleStartBtn()">▶ Start</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="saveSession()" title="Salvează sesiunea completă (ZIP)">💾 Salvează</button>
+  <button class="tb-btn" onclick="document.getElementById('load-session-input').click()" title="Încarcă sesiune din ZIP">📂 Încarcă</button>
+  <input type="file" id="load-session-input" accept=".zip" style="display:none" onchange="loadSession(this)">
+  <div class="ws-chip" id="ws-chip" onclick="openWsModal()" title="Web Search — click pentru detalii">
+    <span class="ws-chip-dot"></span>
+    <span id="ws-chip-label">🔍 Web Search</span>
+  </div>
+  <button class="tb-btn" onclick="openSettings()">⚙ Setări</button>
+</div>
+
+<!-- CTX WARNING -->
+<div id="ctx-warn-banner">
+  <span id="ctx-warn-text">⚠ Context aproape plin!</span>
+  <button onclick="openSummModal()">Sumarizează acum</button>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+  <div id="chat-area">
+    <div id="messages"></div>
+    <!-- INJECT PANEL -->
+    <div id="inject-panel">
+      <div id="inject-label">⏸ Discuție în pauză — injectează mesaj opțional:</div>
+      <textarea id="inject-ta" placeholder="Mesajul tău pentru agenți..."></textarea>
+      <div class="inject-btns">
+        <button class="tb-btn primary" onclick="injectAndResume()">Injectează &amp; Continuă</button>
+        <button class="tb-btn" onclick="resumeDiscussion()">Continuă fără mesaj</button>
+      </div>
+    </div>
+    <!-- INPUT ROW -->
+    <div id="input-row">
+      <textarea id="user-input" placeholder="Mesaj de start (Enter = trimite, Shift+Enter = linie nouă)..." rows="1"></textarea>
+      <button class="send-btn" id="btn-send" onclick="handleSend()">Trimite</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<!-- ════════════════════════════════════════════
+     SETTINGS OVERLAY
+════════════════════════════════════════════ -->
+<div id="settings-overlay">
+  <div id="settings-header">
+    <h2>⚙ Setări AI Discussion v2</h2>
+    <div id="settings-tabs">
+      <button class="stab active" onclick="showSettingsTab('agents')">Agenți</button>
+      <button class="stab" onclick="showSettingsTab('global')">General</button>
+      <button class="stab" onclick="showSettingsTab('websearch')">Web Search</button>
+    </div>
+    <div style="flex:1"></div>
+    <button class="tb-btn primary" onclick="saveAndClose()">✓ Salvează &amp; Închide</button>
+    <button class="tb-btn" onclick="closeSettings()" style="margin-left:6px">✕</button>
+  </div>
+  <div id="settings-body">
+
+    <!-- ── AGENTS TAB ── -->
+    <div id="stab-agents" class="spage agents-grid" style="display:grid">
+
+      <!-- AGENT A -->
+      <div class="agent-col">
+        <div class="agent-col-title">
+          <span>Agent A</span>
+          <input type="color" id="aColor" value="#4a9eff" title="Culoare Agent A">
+        </div>
+        <div class="frow"><label>Nume</label><input id="aName" value="Agent A"></div>
+        <div class="frow"><label>Provider</label>
+          <select id="aProvider" onchange="onProviderChange('a')">
+            <option value="ollama">Ollama</option>
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="anthropic">Anthropic</option>
+          </select>
+        </div>
+        <div class="frow" id="aUrlRow"><label>Server URL</label><input id="aServerUrl" value="http://localhost:11434"></div>
+        <div class="frow" id="aKeyRow" style="display:none"><label>API Key</label><input id="aApiKey" type="password" placeholder="sk-..."></div>
+        <div class="frow"><label>Model</label>
+          <div class="model-row">
+            <select id="aModel"></select>
+            <button class="fetch-btn" onclick="fetchModels('a')">⟳ Fetch</button>
+          </div>
+          <div class="manual-model-row">
+            <input id="aManualModel" placeholder="sau scrie manual...">
+            <button class="fetch-btn" onclick="setManualModel('a')">Set</button>
+          </div>
+        </div>
+        <div class="frow"><label>System Prompt <span style="font-size:10px;color:var(--text3)">(scrie [STOP_DISCUSSION] când vrei să închei)</span></label><textarea id="aSystem" rows="5"></textarea></div>
+        <div class="frow"><label>Temperatură: <span id="aTempVal">0.7</span></label>
+          <input type="range" id="aTemp" min="0" max="2" step="0.05" value="0.7"
+            oninput="document.getElementById('aTempVal').textContent=parseFloat(this.value).toFixed(2)">
+        </div>
+        <div class="frow"><label>Context Size (tokens)</label><input id="aCtx" type="number" value="4096" min="512" max="131072"></div>
+        <div class="srow" id="aThinkRow"><label>Think (Ollama)</label>
+          <label class="toggle"><input type="checkbox" id="aThink"><span class="slider"></span></label>
+        </div>
+      </div>
+
+      <!-- AGENT B -->
+      <div class="agent-col">
+        <div class="agent-col-title">
+          <span>Agent B</span>
+          <input type="color" id="bColor" value="#a855f7" title="Culoare Agent B">
+        </div>
+        <div class="frow"><label>Nume</label><input id="bName" value="Agent B"></div>
+        <div class="frow"><label>Provider</label>
+          <select id="bProvider" onchange="onProviderChange('b')">
+            <option value="ollama">Ollama</option>
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="anthropic">Anthropic</option>
+          </select>
+        </div>
+        <div class="frow" id="bUrlRow"><label>Server URL</label><input id="bServerUrl" value="http://localhost:11434"></div>
+        <div class="frow" id="bKeyRow" style="display:none"><label>API Key</label><input id="bApiKey" type="password" placeholder="sk-..."></div>
+        <div class="frow"><label>Model</label>
+          <div class="model-row">
+            <select id="bModel"></select>
+            <button class="fetch-btn" onclick="fetchModels('b')">⟳ Fetch</button>
+          </div>
+          <div class="manual-model-row">
+            <input id="bManualModel" placeholder="sau scrie manual...">
+            <button class="fetch-btn" onclick="setManualModel('b')">Set</button>
+          </div>
+        </div>
+        <div class="frow"><label>System Prompt <span style="font-size:10px;color:var(--text3)">(scrie [STOP_DISCUSSION] când vrei să închei)</span></label><textarea id="bSystem" rows="5"></textarea></div>
+        <div class="frow"><label>Temperatură: <span id="bTempVal">0.7</span></label>
+          <input type="range" id="bTemp" min="0" max="2" step="0.05" value="0.7"
+            oninput="document.getElementById('bTempVal').textContent=parseFloat(this.value).toFixed(2)">
+        </div>
+        <div class="frow"><label>Context Size (tokens)</label><input id="bCtx" type="number" value="4096" min="512" max="131072"></div>
+        <div class="srow" id="bThinkRow"><label>Think (Ollama)</label>
+          <label class="toggle"><input type="checkbox" id="bThink"><span class="slider"></span></label>
+        </div>
+      </div>
+
+      <!-- SYNTH AGENT -->
+      <div class="agent-col">
+        <div class="agent-col-title"><span>Agent Sinteză</span></div>
+        <div class="frow"><label>Nume</label><input id="sName" value="Sinteză"></div>
+        <div class="frow"><label>Provider</label>
+          <select id="sProvider" onchange="onProviderChange('s')">
+            <option value="ollama">Ollama</option>
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="anthropic">Anthropic</option>
+          </select>
+        </div>
+        <div class="frow" id="sUrlRow"><label>Server URL</label><input id="sServerUrl" value="http://localhost:11434"></div>
+        <div class="frow" id="sKeyRow" style="display:none"><label>API Key</label><input id="sApiKey" type="password" placeholder="sk-..."></div>
+        <div class="frow"><label>Model</label>
+          <div class="model-row">
+            <select id="sModel"></select>
+            <button class="fetch-btn" onclick="fetchModels('s')">⟳ Fetch</button>
+          </div>
+          <div class="manual-model-row">
+            <input id="sManualModel" placeholder="sau scrie manual...">
+            <button class="fetch-btn" onclick="setManualModel('s')">Set</button>
+          </div>
+        </div>
+        <div class="frow"><label>System Prompt</label>
+          <textarea id="sSystem" rows="3">Ești un agent de sinteză. Generează un rezumat structurat, clar și complet al dialogului, păstrând toate informațiile importante.</textarea>
+        </div>
+        <div class="frow"><label>Temperatură: <span id="sTempVal">0.5</span></label>
+          <input type="range" id="sTemp" min="0" max="2" step="0.05" value="0.5"
+            oninput="document.getElementById('sTempVal').textContent=parseFloat(this.value).toFixed(2)">
+        </div>
+        <div class="frow"><label>Context Size (tokens)</label><input id="sCtx" type="number" value="8192" min="512" max="131072"></div>
+        <div class="srow" id="sThinkRow"><label>Think (Ollama)</label>
+          <label class="toggle"><input type="checkbox" id="sThink"><span class="slider"></span></label>
+        </div>
+        <div class="section-divider"></div>
+        <div class="frow"><label>Prompt Sumarizare (variabilă: {dialogue})</label>
+          <textarea id="sSynthPrompt" rows="5">### Sumarizează dialogul următor într-un rezumat structurat și complet:
+
+{dialogue}
+
+### REZUMAT FINAL:</textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── GLOBAL TAB ── -->
+    <div id="stab-global" class="spage single-col" style="display:none">
+      <div class="global-settings">
+        <h3>Setări generale</h3>
+        <div class="frow"><label>Pași maximi (0 = nelimitat)</label><input id="maxSteps" type="number" value="0" min="0" max="9999"></div>
+        <div class="srow"><label>Auto-sumarizare la 90% context</label>
+          <label class="toggle"><input type="checkbox" id="autoSumm" checked><span class="slider"></span></label>
+        </div>
+        <div class="frow"><label>Agent care începe primul</label>
+          <select id="startAgent" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);padding:6px 9px;font-size:13px">
+            <option value="a">Agent A</option>
+            <option value="b">Agent B</option>
+          </select>
+        </div>
+        <div class="frow"><label>Prefix mesaj utilizator (inject)</label><input id="injectPrefix" value="[Utilizator]:"></div>
+      </div>
+    </div>
+
+    <!-- ── WEB SEARCH TAB ── -->
+    <div id="stab-websearch" class="spage ws-layout" style="display:none">
+
+      <!-- ── TOP: 3 coloane ── -->
+      <div class="ws-grid">
+
+        <!-- Col 1: LLM -->
+        <div class="ws-col">
+          <h3>Web Search</h3>
+          <div class="srow">
+            <label>Activat</label>
+            <label class="toggle"><input type="checkbox" id="wsEnabled"><span class="slider"></span></label>
+          </div>
+          <div class="section-divider"></div>
+          <h3>LLM pentru procesare</h3>
+          <div class="frow"><label>Provider</label>
+            <select id="wsProvider" onchange="onWsProviderChange()">
+              <option value="ollama">Ollama</option>
+              <option value="openai">OpenAI</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="anthropic">Anthropic</option>
+            </select>
+          </div>
+          <div class="frow" id="wsUrlRow"><label>Server URL</label><input id="wsServerUrl" value="http://localhost:11434" placeholder="http://localhost:11434"></div>
+          <div class="frow" id="wsKeyRow" style="display:none"><label>API Key</label><input id="wsApiKey" type="password" placeholder="sk-..."></div>
+          <div class="frow"><label>Context Size (tokens)</label><input id="wsCtx" type="number" value="8192" min="512" max="131072"></div>
+          <div class="frow"><label>Model</label>
+            <div class="model-row">
+              <select id="wsModel"></select>
+              <button class="fetch-btn" onclick="fetchModels('ws')">⟳ Fetch</button>
+            </div>
+            <div class="manual-model-row">
+              <input id="wsManualModel" placeholder="sau scrie manual...">
+              <button class="fetch-btn" onclick="setManualModel('ws')">Set</button>
+            </div>
+          </div>
+          <div class="section-divider"></div>
+          <p style="font-size:11px;color:var(--text3);line-height:1.6">
+            <b>Cum folosesc agenții web search:</b><br>
+            Adaugă în system prompt-ul agenților:<br>
+            <code style="background:var(--bg3);padding:2px 5px;border-radius:3px">REASON: [de ce ai nevoie]<br>WEB_SEARCH: [query concis]</code>
+          </p>
+        </div>
+
+        <!-- Col 2: Parametri + Cache -->
+        <div class="ws-col">
+          <h3>Parametri căutare</h3>
+          <div class="frow"><label>Rezultate DuckDuckGo (max)</label><input id="wsMaxResults" type="number" value="5" min="1" max="20"></div>
+          <div class="frow"><label>Pagini candidate pentru ranking (max)</label><input id="wsMaxFetch" type="number" value="5" min="1" max="10"></div>
+          <div class="frow"><label>Dimensiune maximă pagină (chars)</label><input id="wsMaxPageSize" type="number" value="30000" min="5000" max="100000"></div>
+          <div class="frow"><label>Prag injecție directă (chars)</label><input id="wsBriefThreshold" type="number" value="3000" min="500" max="20000"></div>
+          <div class="frow"><label>Regiune căutare</label>
+            <select id="wsRegion" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);padding:6px 9px;font-size:13px">
+              <option value="wt-wt">Global</option>
+              <option value="ro-ro">România</option>
+              <option value="us-en">SUA (en)</option>
+              <option value="de-de">Germania</option>
+              <option value="fr-fr">Franța</option>
+            </select>
+          </div>
+          <div class="section-divider"></div>
+          <h3>Cache sesiune (SQLite)</h3>
+          <div class="frow"><label>TTL cache (secunde, 0 = dezactivat)</label><input id="wsCacheTTL" type="number" value="7200" min="0" max="86400"></div>
+          <div class="srow" style="gap:6px">
+            <label id="wsCacheStatsLabel" style="color:var(--text3);font-size:12px;flex:1">— intrări cache: necunoscut —</label>
+            <button class="fetch-btn" onclick="loadWsCacheStats()">⟳ Stats</button>
+            <button class="fetch-btn" style="color:#f87171" onclick="clearWsCache()">🗑 Golește</button>
+          </div>
+          <div id="wsCacheEntries" style="display:none;max-height:180px;overflow-y:auto;font-size:11px;color:var(--text3);border:1px solid var(--border2);border-radius:var(--radius);padding:6px"></div>
+        </div>
+
+        <!-- Col 3: Rezultate -->
+        <div class="ws-col">
+          <h3>Rezultate</h3>
+          <div class="frow"><label>Surse returnate ca rezultat (max)</label><input id="wsMaxStoreResults" type="number" value="1" min="1" max="10"></div>
+          <p style="font-size:11px;color:var(--text3);line-height:1.5">Sumarizarea primește pagina completă (limitat de <b>Dimensiune maximă pagină</b>).</p>
+          <div class="section-divider"></div>
+          <h3>Overview pagină</h3>
+          <div class="srow">
+            <label>Activat (generează rezumat pagină înainte de verificare relevanță)</label>
+            <label class="toggle"><input type="checkbox" id="wsOverviewEnabled" checked><span class="slider"></span></label>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── BOTTOM: Prompturi ── -->
+      <div class="ws-prompts">
+
+        <div class="ws-prompt-card">
+          <div class="ws-prompt-header">
+            <div>
+              <h4>Optimizare query</h4>
+              <div class="prompt-vars">{date} · {reason} · {query}</div>
+            </div>
+            <button class="btn-fs" onclick="openPromptFS('wsOptPrompt','Optimizare query','{date} · {reason} · {query}')">⛶ Fullscreen</button>
+          </div>
+          <textarea id="wsOptPrompt"></textarea>
+        </div>
+
+        <div class="ws-prompt-card">
+          <div class="ws-prompt-header">
+            <div>
+              <h4>Ranking rezultate</h4>
+              <div class="prompt-vars">{reason} · {query} · {results} · {max_fetch}</div>
+            </div>
+            <button class="btn-fs" onclick="openPromptFS('wsRankPrompt','Ranking rezultate','{reason} · {query} · {results} · {max_fetch}')">⛶ Fullscreen</button>
+          </div>
+          <textarea id="wsRankPrompt"></textarea>
+        </div>
+
+        <div class="ws-prompt-card">
+          <div class="ws-prompt-header">
+            <div>
+              <h4>Overview pagină</h4>
+              <div class="prompt-vars">{content}</div>
+            </div>
+            <button class="btn-fs" onclick="openPromptFS('wsOverviewPrompt','Overview pagină','{content}')">⛶ Fullscreen</button>
+          </div>
+          <textarea id="wsOverviewPrompt"></textarea>
+        </div>
+
+        <div class="ws-prompt-card">
+          <div class="ws-prompt-header">
+            <div>
+              <h4>Verificare relevanță</h4>
+              <div class="prompt-vars">{reason} · {query} · {title} · {url} · {content}</div>
+            </div>
+            <button class="btn-fs" onclick="openPromptFS('wsRelPrompt','Verificare relevanță','{reason} · {query} · {title} · {url} · {content}')">⛶ Fullscreen</button>
+          </div>
+          <textarea id="wsRelPrompt"></textarea>
+        </div>
+
+        <div class="ws-prompt-card" style="grid-column: span 2">
+          <div class="ws-prompt-header">
+            <div>
+              <h4>Sumarizare rezultat</h4>
+              <div class="prompt-vars">{date} · {reason} · {query} · {source_title} · {source_url} · {content}</div>
+            </div>
+            <button class="btn-fs" onclick="openPromptFS('wsSummPrompt','Sumarizare rezultat','{date} · {reason} · {query} · {source_title} · {source_url} · {content}')">⛶ Fullscreen</button>
+          </div>
+          <textarea id="wsSummPrompt"></textarea>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div><!-- settings-overlay -->
+
+<!-- PROMPT FULLSCREEN MODAL -->
+<div id="prompt-fs-overlay">
+  <div id="prompt-fs-header">
+    <span id="prompt-fs-title"></span>
+    <span id="prompt-fs-vars"></span>
+    <button class="fetch-btn" style="margin-left:auto" onclick="closePromptFS()">✕ Închide</button>
+  </div>
+  <textarea id="prompt-fs-textarea"></textarea>
+</div>
+
+<!-- SUMMARIZE MODAL -->
+<div id="summ-modal">
+  <div class="summ-box">
+    <h3>∑ Sumarizează Discuția</h3>
+    <p>Agentul de sinteză va genera un rezumat structurat al discuției curente.</p>
+    <label>
+      <input type="checkbox" id="summ-replace" checked>
+      Înlocuiește istoricul cu rezumatul (reduce token usage)
+    </label>
+    <div class="summ-btns">
+      <button class="tb-btn primary" onclick="doSummarize()">Generează Rezumat</button>
+      <button class="tb-btn" onclick="closeSummModal()">Anulează</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- WEB SEARCH MODAL -->
+<div id="ws-modal">
+  <div id="ws-modal-box">
+    <div id="ws-modal-header">
+      <span class="ws-chip-dot" id="ws-modal-dot"></span>
+      <h3>🔍 Web Search</h3>
+      <span id="ws-modal-status" style="font-size:11px;color:var(--text3)">Inactiv</span>
+      <button class="tb-btn" onclick="closeWsModal()" style="margin-left:auto">✕</button>
+    </div>
+    <div class="ws-steps" id="ws-steps">
+      <div class="ws-step" id="wss-0"><span class="ws-step-icon">⟳</span><span>Optimizare query</span></div>
+      <div class="ws-step" id="wss-1"><span class="ws-step-icon">⟳</span><span>Căutare DuckDuckGo</span></div>
+      <div class="ws-step" id="wss-2"><span class="ws-step-icon">⟳</span><span>Evaluare rezultate</span></div>
+      <div class="ws-step" id="wss-3"><span class="ws-step-icon">⟳</span><span>Fetch pagini</span></div>
+      <div class="ws-step" id="wss-4"><span class="ws-step-icon">⟳</span><span>Generare rezumat</span></div>
+    </div>
+    <div id="ws-query-display"></div>
+    <div id="ws-log"></div>
+    <div id="ws-result-row"></div>
+    <div id="ws-modal-footer">
+      <button class="tb-btn" onclick="closeWsModal()">Închide</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONTEXT MENU -->
+<div id="ctx-menu">
+  <div class="ctx-item" id="ctx-sel-toggle" onclick="ctxToggleSelect()">☐ Selectează mesajul</div>
+  <div class="ctx-item" onclick="ctxSelectAll()">☑ Selectează toate</div>
+  <div class="ctx-item" onclick="ctxDeselectAll()">☐ Deselectează toate</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="ctx-export-sel" onclick="ctxOpenExport()">📤 Exportează selecția (<span id="ctx-sel-count">0</span>)</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-check-row">
+    <input type="checkbox" id="ctx-include-think">
+    <span>Include gândire</span>
+  </div>
+  <div class="ctx-item" onclick="doExportHtml()">💾 Export HTML (mesaj)</div>
+  <div class="ctx-item" onclick="copyMsgText()">📋 Copiază text</div>
+</div>
+
+<!-- EXPORT MODAL -->
+<div id="export-modal-overlay" onclick="closeExportModal()"></div>
+<div id="export-modal">
+  <h3>📤 Exportează chat</h3>
+  <div class="ex-count"><span id="export-msg-count">0</span> mesaje selectate</div>
+  <div class="ex-group">
+    <label class="ex-title">Format:</label>
+    <div class="ex-radios">
+      <label><input type="radio" name="ex_fmt" value="pdf" checked> 📄 PDF</label>
+      <label><input type="radio" name="ex_fmt" value="docx"> 📝 DOCX</label>
+    </div>
+  </div>
+  <div class="ex-group">
+    <label class="ex-title">Temă:</label>
+    <div class="ex-radios">
+      <label><input type="radio" name="ex_theme" value="dark" checked> 🌙 Dark</label>
+      <label><input type="radio" name="ex_theme" value="light"> ☀ Light</label>
+    </div>
+  </div>
+  <div class="ex-btns">
+    <button id="do-export-btn" onclick="doExport()">⬇ Exportează</button>
+    <button id="cancel-export-btn" onclick="closeExportModal()">Anulează</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast-wrap"></div>
+
+<!-- ════════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ─── KATEX + MERMAID INIT ───
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'dark',
+  securityLevel: 'loose',
+  flowchart: {
+    wrappingWidth: 200,
+    useMaxWidth: true,
+  },
+  themeVariables: {
+    primaryColor: '#1e3a5f', primaryTextColor: '#e0e0e0',
+    primaryBorderColor: '#3a6fa8', lineColor: '#6a9fd8',
+    secondaryColor: '#1a2a1a', tertiaryColor: '#1a1a2e'
+  }
+});
+
+// ─── CONSTANTS ───
+const ANTHROPIC_MODELS = [
+  'claude-opus-4-6','claude-sonnet-4-6','claude-haiku-4-5-20251001',
+  'claude-opus-4-5','claude-sonnet-4-5',
+  'claude-3-5-sonnet-20241022','claude-3-5-haiku-20241022',
+  'claude-3-opus-20240229','claude-3-sonnet-20240229','claude-3-haiku-20240307',
+];
+
+const DEFAULTS = {
+  aName:'Agent A', aColor:'#4a9eff', aProvider:'ollama',
+  aServerUrl:'http://localhost:11434', aApiKey:'', aModel:'',
+  aSystem:'Ești Agent A. Discuți cu Agent B pe tema dată de utilizator. Fii direct, analitic și constructiv. Folosește [STOP_DISCUSSION] doar după cel puțin 3 schimburi complete și numai dacă nu mai există niciun unghi neexplorat al temei.',
+  aTemp:0.7, aCtx:4096, aThink:false,
+
+  bName:'Agent B', bColor:'#a855f7', bProvider:'ollama',
+  bServerUrl:'http://localhost:11434', bApiKey:'', bModel:'',
+  bSystem:'Ești Agent B. Discuți cu Agent A pe tema dată de utilizator. Aduce perspective noi și pune întrebări relevante. Folosește [STOP_DISCUSSION] doar după cel puțin 3 schimburi complete și numai dacă nu mai există niciun unghi neexplorat al temei.',
+  bTemp:0.7, bCtx:4096, bThink:false,
+
+  sName:'Sinteză', sProvider:'ollama',
+  sServerUrl:'http://localhost:11434', sApiKey:'', sModel:'',
+  sSystem:'Ești un agent de sinteză. Generează un rezumat structurat, clar și complet al dialogului, păstrând toate informațiile importante.',
+  sTemp:0.5, sCtx:8192, sThink:false,
+  sSynthPrompt:'### Sumarizează dialogul următor într-un rezumat structurat și complet:\n\n{dialogue}\n\n### REZUMAT FINAL:',
+
+  maxSteps:0, autoSumm:true, startAgent:'a', injectPrefix:'[Utilizator]:', humanInLoop:false,
+
+  wsEnabled: false,
+  wsProvider: 'ollama', wsServerUrl: 'http://localhost:11434', wsApiKey: '', wsModel: '',
+  wsCtx: 8192, wsCacheTTL: 7200,
+  wsMaxStoreResults: 1, wsOverviewEnabled: true,
+  wsMaxResults: 10, wsMaxFetch: 5, wsMaxPageSize: 30000, wsBriefThreshold: 3000, wsRegion: 'wt-wt',
+
+  wsOverviewPrompt:
+`Read the following web page content and provide a brief structured overview.
+
+CONTENT:
+{content}
+
+Provide:
+- Page type (e.g. official docs, changelog, blog post, forum, GitHub repo, tutorial)
+- Main topics covered (2-4 bullet points)
+- Key details present: versions, dates, commands, names (if any)
+Be concise — maximum 8 bullet points total.`,
+
+  wsOptPrompt:
+`Your task is to formulate the best search query for DuckDuckGo.
+
+Today's date: {date}
+User's reason: {reason}
+User's query: {query}
+
+Instructions:
+1. Optimize the query for DuckDuckGo search (add relevant technical terms).
+2. ALWAYS write the query in English, regardless of input language.
+3. Keep it concise (max 10 words).
+4. If the query is about recent versions or releases, add the relevant year(s).
+5. DO NOT use search operators like site:, inurl:, intitle:, filetype:
+6. Return ONLY the optimized search query, nothing else. No quotes, no explanation.`,
+
+  wsRankPrompt:
+`Evaluate these search results and rank them by relevance.
+
+REASON the user needs this information:
+{reason}
+
+SEARCH QUERY: {query}
+
+SEARCH RESULTS:
+{results}
+Instructions:
+1. Rank the results by relevance to the REASON (most relevant first).
+2. Prefer official sources: documentation, changelogs, official blogs, GitHub repos of the project.
+3. Exclude obviously irrelevant results (ads, unrelated topics, wrong language communities).
+4. Return ONLY the numbers of the top results in order, comma-separated.
+   Example: 2,1,4
+5. Maximum {max_fetch} results.`,
+
+  wsRelPrompt:
+`Evaluate if this web page is a relevant SOURCE for the user's needs.
+
+REASON: {reason}
+SEARCH QUERY: {query}
+
+PAGE TITLE: {title}
+PAGE URL: {url}
+PAGE CONTENT (sample):
+{content}
+
+Answer YES or NO.
+- Answer YES if this source TYPE is likely to contain the needed information (e.g. official docs, release pages, changelogs, official blogs, GitHub repos) — even if the specific version/detail isn't visible in this sample.
+- Answer NO only if the source is clearly unrelated (wrong project, wrong topic, forum noise, ads).
+One line: YES or NO followed by a brief reason.`,
+
+  wsSummPrompt:
+`You are summarizing a web page for a user. Today's date is {date}.
+
+REASON the user needs this information: {reason}
+SEARCH QUERY: {query}
+SOURCE: {source_title} ({source_url})
+
+PAGE CONTENT:
+{content}
+
+Instructions:
+1. Summarize only what is relevant to the REASON — include as much detail as needed, but omit irrelevant content.
+2. Preserve specific details: versions, dates, numbers, commands, code snippets, names.
+3. If the content is outdated relative to today ({date}), mention it explicitly.
+4. Respond in the same language as the REASON.
+5. Start directly with the information found — no meta-commentary.`,
+};
+
+// ─── STATE ───
+let cfg = {...DEFAULTS};
+const state = {
+  running: false,
+  paused: false,
+  ending: false,
+  stepCount: 0,
+  discussion: [],   // [{role:'a'|'b'|'user'|'system', content, step?}]
+  pendingInject: null,
+  pendingWebSearch: null,
+  abortCtrl: null,
+  warnedCtx: false,
+};
+let _resumeResolve = null;
+let _ctxTargetMsg = null;
+
+// ─── CONFIG PERSISTENCE ───
+function loadCfg() {
+  try {
+    const s = localStorage.getItem('ai_disc_v2');
+    if (s) cfg = {...DEFAULTS, ...JSON.parse(s)};
+  } catch(e) {}
+  applyCfgToUI();
+  applyColors();
+}
+
+function saveCfg() {
+  readCfgFromUI();
+  localStorage.setItem('ai_disc_v2', JSON.stringify(cfg));
+}
+
+function readCfgFromUI() {
+  const strFields = [
+    'aName','aServerUrl','aApiKey','aModel','aSystem',
+    'bName','bServerUrl','bApiKey','bModel','bSystem',
+    'sName','sServerUrl','sApiKey','sModel','sSystem',
+    'sSynthPrompt','injectPrefix',
+    'wsSummPrompt','wsOptPrompt','wsRankPrompt','wsRelPrompt','wsOverviewPrompt'
+  ];
+  strFields.forEach(k => {
+    const el = document.getElementById(k);
+    if (el) cfg[k] = el.value;
+  });
+  cfg.aColor = document.getElementById('aColor').value;
+  cfg.bColor = document.getElementById('bColor').value;
+  cfg.aProvider = document.getElementById('aProvider').value;
+  cfg.bProvider = document.getElementById('bProvider').value;
+  cfg.sProvider = document.getElementById('sProvider').value;
+  cfg.aTemp = parseFloat(document.getElementById('aTemp').value) || 0.7;
+  cfg.bTemp = parseFloat(document.getElementById('bTemp').value) || 0.7;
+  cfg.sTemp = parseFloat(document.getElementById('sTemp').value) || 0.5;
+  cfg.aCtx = parseInt(document.getElementById('aCtx').value) || 4096;
+  cfg.bCtx = parseInt(document.getElementById('bCtx').value) || 4096;
+  cfg.sCtx = parseInt(document.getElementById('sCtx').value) || 8192;
+  cfg.aThink = document.getElementById('aThink').checked;
+  cfg.bThink = document.getElementById('bThink').checked;
+  cfg.sThink = document.getElementById('sThink').checked;
+  cfg.maxSteps = parseInt(document.getElementById('maxSteps').value) || 0;
+  cfg.autoSumm = document.getElementById('autoSumm').checked;
+  cfg.startAgent = document.getElementById('startAgent').value;
+  cfg.wsEnabled = document.getElementById('wsEnabled').checked;
+  cfg.wsProvider = document.getElementById('wsProvider').value;
+  cfg.wsServerUrl = document.getElementById('wsServerUrl').value;
+  cfg.wsApiKey = document.getElementById('wsApiKey').value;
+  cfg.wsModel = document.getElementById('wsModel').value || document.getElementById('wsManualModel').value;
+  cfg.wsMaxResults = parseInt(document.getElementById('wsMaxResults').value) || 5;
+  cfg.wsMaxFetch = parseInt(document.getElementById('wsMaxFetch').value) || 3;
+  cfg.wsMaxPageSize = parseInt(document.getElementById('wsMaxPageSize').value) || 30000;
+  cfg.wsBriefThreshold = parseInt(document.getElementById('wsBriefThreshold').value) || 3000;
+  cfg.wsRegion = document.getElementById('wsRegion').value;
+  cfg.wsCacheTTL = parseInt(document.getElementById('wsCacheTTL').value) ?? 7200;
+  cfg.wsCtx = parseInt(document.getElementById('wsCtx').value) || 8192;
+  cfg.wsMaxStoreResults = parseInt(document.getElementById('wsMaxStoreResults').value) || 1;
+  cfg.wsOverviewEnabled = document.getElementById('wsOverviewEnabled').checked;
+
+}
+
+function applyCfgToUI() {
+  const str = [
+    'aName','aServerUrl','aApiKey','aSystem',
+    'bName','bServerUrl','bApiKey','bSystem',
+    'sName','sServerUrl','sApiKey','sSystem','sSynthPrompt','injectPrefix',
+    'wsSummPrompt','wsOptPrompt','wsRankPrompt','wsRelPrompt','wsOverviewPrompt'
+  ];
+  str.forEach(k => {
+    const el = document.getElementById(k);
+    if (el && cfg[k] !== undefined) el.value = cfg[k];
+  });
+  document.getElementById('aColor').value = cfg.aColor || '#4a9eff';
+  document.getElementById('bColor').value = cfg.bColor || '#a855f7';
+  document.getElementById('aProvider').value = cfg.aProvider || 'ollama';
+  document.getElementById('bProvider').value = cfg.bProvider || 'ollama';
+  document.getElementById('sProvider').value = cfg.sProvider || 'ollama';
+  ['a','b','s'].forEach(ag => {
+    const tv = parseFloat(cfg[ag+'Temp']) || (ag==='s'?0.5:0.7);
+    document.getElementById(ag+'Temp').value = tv;
+    document.getElementById(ag+'TempVal').textContent = tv.toFixed(2);
+    document.getElementById(ag+'Ctx').value = cfg[ag+'Ctx'] || (ag==='s'?8192:4096);
+    document.getElementById(ag+'Think').checked = !!cfg[ag+'Think'];
+  });
+  document.getElementById('maxSteps').value = cfg.maxSteps || 0;
+  document.getElementById('autoSumm').checked = cfg.autoSumm !== false;
+  document.getElementById('startAgent').value = cfg.startAgent || 'a';
+  onProviderChange('a'); onProviderChange('b'); onProviderChange('s');
+  // Restore saved model selection
+  ['a','b','s'].forEach(ag => {
+    const model = cfg[ag+'Model'];
+    if (!model) return;
+    const sel = document.getElementById(ag+'Model');
+    let opt = Array.from(sel.options).find(o => o.value === model);
+    if (!opt) { opt = new Option(model, model); sel.add(opt); }
+    sel.value = model;
+  });
+  document.getElementById('wsEnabled').checked = !!cfg.wsEnabled;
+  document.getElementById('wsProvider').value = cfg.wsProvider || 'ollama';
+  document.getElementById('wsServerUrl').value = cfg.wsServerUrl || 'http://localhost:11434';
+  document.getElementById('wsApiKey').value = cfg.wsApiKey || '';
+  document.getElementById('wsMaxResults').value = cfg.wsMaxResults || 5;
+  document.getElementById('wsMaxFetch').value = cfg.wsMaxFetch || 3;
+  document.getElementById('wsMaxPageSize').value = cfg.wsMaxPageSize || 30000;
+  document.getElementById('wsBriefThreshold').value = cfg.wsBriefThreshold || 3000;
+  document.getElementById('wsRegion').value = cfg.wsRegion || 'wt-wt';
+  document.getElementById('wsCacheTTL').value = cfg.wsCacheTTL ?? 7200;
+  document.getElementById('wsCtx').value = cfg.wsCtx || 8192;
+  document.getElementById('wsMaxStoreResults').value = cfg.wsMaxStoreResults || 1;
+  document.getElementById('wsOverviewEnabled').checked = cfg.wsOverviewEnabled !== false;
+  onWsProviderChange();
+  if (cfg.wsModel) {
+    const wsSel = document.getElementById('wsModel');
+    let opt = Array.from(wsSel.options).find(o => o.value === cfg.wsModel);
+    if (!opt) { opt = new Option(cfg.wsModel, cfg.wsModel); wsSel.add(opt); }
+    wsSel.value = cfg.wsModel;
+  }
+}
+
+function applyColors() {
+  document.documentElement.style.setProperty('--agent-a', cfg.aColor || '#4a9eff');
+  document.documentElement.style.setProperty('--agent-b', cfg.bColor || '#a855f7');
+  // Sincronizează butonul H-in-L cu starea reală din cfg
+  const hilBtn = document.getElementById('btn-hil');
+  if (hilBtn) {
+    if (cfg.humanInLoop) {
+      hilBtn.classList.add('active');
+      hilBtn.title = 'Human-in-loop: ACTIVAT — pauză după fiecare turn';
+    } else {
+      hilBtn.classList.remove('active');
+      hilBtn.title = 'Human-in-loop: dezactivat';
+    }
+  }
+}
+
+// ─── SETTINGS UI ───
+function openSettings() {
+  document.getElementById('settings-overlay').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settings-overlay').classList.remove('open');
+}
+function saveAndClose() {
+  saveCfg();
+  applyColors();
+  closeSettings();
+  toast('Setări salvate', 'ok');
+}
+function showSettingsTab(tab) {
+  document.querySelectorAll('.spage').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('.stab').forEach(b => b.classList.remove('active'));
+  if (tab === 'agents') {
+    document.getElementById('stab-agents').style.display = 'grid';
+    document.querySelectorAll('.stab')[0].classList.add('active');
+  } else if (tab === 'websearch') {
+    document.getElementById('stab-websearch').style.display = 'flex';
+    document.querySelectorAll('.stab')[2].classList.add('active');
+  } else {
+    document.getElementById('stab-global').style.display = 'block';
+    document.querySelectorAll('.stab')[1].classList.add('active');
+  }
+}
+
+function onProviderChange(ag) {
+  const prov = document.getElementById(ag + 'Provider').value;
+  const urlRow = document.getElementById(ag + 'UrlRow');
+  const keyRow = document.getElementById(ag + 'KeyRow');
+  const thinkRow = document.getElementById(ag + 'ThinkRow');
+  if (urlRow) urlRow.style.display = prov === 'ollama' ? '' : 'none';
+  if (keyRow) keyRow.style.display = prov !== 'ollama' ? '' : 'none';
+  if (thinkRow) thinkRow.style.display = prov === 'ollama' ? '' : 'none';
+  if (prov === 'anthropic') _populateAnthropicModels(ag);
+}
+
+function onWsProviderChange() {
+  const p = document.getElementById('wsProvider').value;
+  document.getElementById('wsUrlRow').style.display = p === 'ollama' ? '' : 'none';
+  document.getElementById('wsKeyRow').style.display = p !== 'ollama' ? '' : 'none';
+  if (p === 'anthropic') {
+    const sel = document.getElementById('wsModel');
+    const cur = sel.value;
+    sel.innerHTML = '';
+    ANTHROPIC_MODELS.forEach(m => sel.add(new Option(m, m)));
+    if (ANTHROPIC_MODELS.includes(cur)) sel.value = cur;
+  }
+}
+
+function _populateAnthropicModels(ag) {
+  const sel = document.getElementById(ag + 'Model');
+  const cur = sel.value;
+  sel.innerHTML = '';
+  ANTHROPIC_MODELS.forEach(m => sel.add(new Option(m, m)));
+  if (ANTHROPIC_MODELS.includes(cur)) sel.value = cur;
+}
+
+async function fetchModels(ag) {
+  readCfgFromUI();
+  const prov = ag === 'ws' ? cfg.wsProvider : cfg[ag + 'Provider'];
+  const serverUrl = ag === 'ws' ? cfg.wsServerUrl : cfg[ag + 'ServerUrl'];
+  const apiKey = ag === 'ws' ? cfg.wsApiKey : cfg[ag + 'ApiKey'];
+  if (prov === 'anthropic') {
+    const sel = document.getElementById(ag + 'Model');
+    const cur = sel.value;
+    sel.innerHTML = '';
+    ANTHROPIC_MODELS.forEach(m => sel.add(new Option(m, m)));
+    if (ANTHROPIC_MODELS.includes(cur)) sel.value = cur;
+    toast('Modele Anthropic încărcate', 'ok');
+    return;
+  }
+  const params = new URLSearchParams({ provider: prov });
+  if (prov === 'ollama') params.set('server', serverUrl || 'http://localhost:11434');
+  else params.set('apiKey', apiKey || '');
+  try {
+    toast('Se încarcă modelele...');
+    const r = await fetch('/api/models?' + params);
+    const d = await r.json();
+    if (d.error) { toast('Eroare: ' + d.error, 'err'); return; }
+    const sel = document.getElementById(ag + 'Model');
+    const cur = sel.value;
+    sel.innerHTML = '';
+    (d.models || []).forEach(m => sel.add(new Option(m, m)));
+    if (cur && d.models.includes(cur)) sel.value = cur;
+    toast(d.models.length + ' modele încărcate', 'ok');
+  } catch(e) { toast('Eroare: ' + e.message, 'err'); }
+}
+
+function setManualModel(ag) {
+  const inp = document.getElementById(ag + 'ManualModel');
+  const val = inp.value.trim();
+  if (!val) return;
+  const sel = document.getElementById(ag + 'Model');
+  let opt = Array.from(sel.options).find(o => o.value === val);
+  if (!opt) { opt = new Option(val, val); sel.add(opt); }
+  sel.value = val;
+  inp.value = '';
+  toast('Model setat: ' + val, 'ok');
+}
+
+// ─── WEB SEARCH MODAL ───
+const _wsStepNames = ['Optimizare query','Căutare DuckDuckGo','Evaluare rezultate','Fetch pagini','Generare rezumat'];
+
+function openWsModal() { document.getElementById('ws-modal').classList.add('open'); }
+function closeWsModal() { document.getElementById('ws-modal').classList.remove('open'); }
+
+function _wsResetModal() {
+  for (let i = 0; i < 5; i++) {
+    const el = document.getElementById('wss-' + i);
+    el.className = 'ws-step';
+    el.querySelector('.ws-step-icon').textContent = '⟳';
+  }
+  document.getElementById('ws-log').innerHTML = '';
+  document.getElementById('ws-query-display').textContent = '';
+  document.getElementById('ws-result-row').className = 'ws-result-row';
+  document.getElementById('ws-result-row').innerHTML = '';
+  document.getElementById('ws-modal-status').textContent = 'Inactiv';
+  document.getElementById('ws-chip').classList.remove('active');
+  document.getElementById('ws-modal-dot').style.background = '';
+}
+
+function _wsSetStep(i, status) {
+  const el = document.getElementById('wss-' + i);
+  el.className = 'ws-step ' + status;
+  const icon = el.querySelector('.ws-step-icon');
+  if (status === 'done') icon.textContent = '✓';
+  else if (status === 'skipped') icon.textContent = '–';
+  else icon.textContent = '⟳';
+}
+
+function _wsAddLog(msg) {
+  const logEl = document.getElementById('ws-log');
+  const line = document.createElement('div');
+  line.textContent = '[' + new Date().toLocaleTimeString('ro-RO', {hour:'2-digit',minute:'2-digit',second:'2-digit'}) + '] ' + msg;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+async function runWebSearch(agKey, reason, query) {
+  if (!cfg.wsEnabled || !cfg.wsModel) {
+    addSystemMsg('⚠ Web Search dezactivat sau model neconfigurat.');
+    return null;
+  }
+
+  _wsResetModal();
+  document.getElementById('ws-chip').classList.add('active');
+  document.getElementById('ws-modal-status').textContent = 'Căutare...';
+  document.getElementById('ws-query-display').textContent = `Query: ${query}`;
+  document.getElementById('ws-modal-dot').style.background = '#22c55e';
+
+  const wsConfig = {
+    provider: cfg.wsProvider,
+    model: cfg.wsModel,
+    apiKey: cfg.wsApiKey,
+    serverUrl: cfg.wsServerUrl,
+    maxResults: cfg.wsMaxResults,
+    maxFetch: cfg.wsMaxFetch,
+    maxPageSize: cfg.wsMaxPageSize,
+    briefThreshold: cfg.wsBriefThreshold,
+    region: cfg.wsRegion,
+    optPrompt: cfg.wsOptPrompt,
+    rankPrompt: cfg.wsRankPrompt,
+    relPrompt: cfg.wsRelPrompt,
+    overviewPrompt: cfg.wsOverviewPrompt,
+    summPrompt: cfg.wsSummPrompt,
+    maxStoreResults: cfg.wsMaxStoreResults || 1,
+    overviewEnabled: cfg.wsOverviewEnabled !== false,
+    cacheTTL: cfg.wsCacheTTL ?? 7200,
+    contextSize: cfg.wsCtx || 8192,
+  };
+
+  let finalResult = null;
+  try {
+    const resp = await fetch('/api/websearch', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({reason, query, config: wsConfig}),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`Server ${resp.status}: ${errText.slice(0, 200)}`);
+    }
+    const reader = resp.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const {value, done} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, {stream: true});
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const obj = JSON.parse(line);
+          if (obj.step !== undefined && obj.stepStatus) _wsSetStep(obj.step, obj.stepStatus);
+          if (obj.log) _wsAddLog(obj.log);
+          if (obj.done) {
+            finalResult = obj.result || null;
+          }
+        } catch(e) {}
+      }
+    }
+  } catch(e) {
+    _wsAddLog('Eroare: ' + e.message);
+    finalResult = {success: false, summary: 'Web search error: ' + e.message};
+  }
+
+  document.getElementById('ws-chip').classList.remove('active');
+  document.getElementById('ws-modal-dot').style.background = '';
+
+  if (finalResult) {
+    if (finalResult.success) {
+      document.getElementById('ws-modal-status').textContent = '✓ Finalizat';
+      const resRow = document.getElementById('ws-result-row');
+      resRow.className = 'ws-result-row show';
+      resRow.innerHTML = finalResult.sourceUrl
+        ? `Sursă: <a class="ws-source-link" href="${escHtml(finalResult.sourceUrl)}" target="_blank">${escHtml(finalResult.sourceTitle || finalResult.sourceUrl)}</a> · ${(finalResult.contentSize/1000).toFixed(1)}k chars`
+        : 'Rezultat fără URL sursă';
+    } else {
+      document.getElementById('ws-modal-status').textContent = '✗ Eșuat';
+    }
+  }
+
+  return finalResult;
+}
+
+// ─── STREAMING ───
+async function* apiStream(agKey, messages, signal) {
+  readCfgFromUI();
+  const prov = cfg[agKey + 'Provider'];
+  const body = {
+    provider: prov,
+    model: cfg[agKey + 'Model'],
+    messages,
+    systemPrompt: `[Data și ora curentă: ${_today()} ${_now()}]\n\n` + (cfg[agKey + 'System'] || ''),
+    temperature: cfg[agKey + 'Temp'],
+    contextSize: cfg[agKey + 'Ctx'],
+    thinkEnabled: cfg[agKey + 'Think'] || false,
+  };
+  if (prov === 'ollama') body.serverUrl = cfg[agKey + 'ServerUrl'];
+  else body.apiKey = cfg[agKey + 'ApiKey'];
+
+  const resp = await fetch('/api/chat', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const reader = resp.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, {stream: true});
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try { yield JSON.parse(line); } catch(e) {}
+    }
+  }
+}
+
+// ─── CONTEXT BUILDING ───
+function buildContext(agKey, discussion) {
+  const msgs = [];
+  for (const entry of discussion) {
+    if (entry.role === 'system') {
+      // System messages (web search results, instructions) → inject as user messages
+      const content = entry.content;
+      if (msgs.length > 0 && msgs[msgs.length-1].role === 'user') {
+        msgs[msgs.length-1].content += '\n\n' + content;
+      } else {
+        msgs.push({role: 'user', content});
+      }
+      continue;
+    }
+    const isMe = entry.role === agKey;
+    const role = isMe ? 'assistant' : 'user';
+    const name = entry.role === 'user' ? (cfg.injectPrefix || '[Utilizator]:')
+                 : entry.role === 'a' ? cfg.aName
+                 : cfg.bName;
+    const prefix = isMe ? '' : name + '\n';
+    const content = prefix + entry.content;
+    if (msgs.length > 0 && msgs[msgs.length-1].role === role) {
+      msgs[msgs.length-1].content += '\n\n' + content;
+    } else {
+      msgs.push({role, content});
+    }
+  }
+  if (msgs.length === 0 || msgs[0].role !== 'user') {
+    msgs.unshift({role: 'user', content: '(start)'});
+  }
+  return msgs;
+}
+
+// ─── CONTEXT BAR ───
+function estimateTokens() {
+  return Math.round(state.discussion.reduce((s, e) => s + e.content.length, 0) / 4);
+}
+function getMaxCtx() {
+  return Math.max(cfg.aCtx || 4096, cfg.bCtx || 4096);
+}
+function updateCtxBar() {
+  const used = estimateTokens();
+  const max = getMaxCtx();
+  const pct = Math.min(100, Math.round(used / max * 100));
+  const fill = document.getElementById('ctx-bar-fill');
+  fill.style.width = pct + '%';
+  fill.style.background = pct > 85 ? 'var(--red)' : pct > 65 ? 'var(--orange)' : 'var(--green)';
+  document.getElementById('ctx-bar-label').textContent = `Context: ${pct}% (~${used} tok)`;
+  if (pct >= 90 && !state.warnedCtx) {
+    state.warnedCtx = true;
+    _showCtxWarn(pct);
+    if (cfg.autoSumm && state.running) {
+      addSystemMsg('⚠ Context la 90%! Inițiez auto-sumarizare...');
+      runSummarize(true);
+    }
+  } else if (pct >= 80 && !state.warnedCtx) {
+    _showCtxWarn(pct);
+  }
+}
+function _showCtxWarn(pct) {
+  document.getElementById('ctx-warn-text').textContent = `⚠ Context la ${pct}% — consideră sumarizarea!`;
+  document.getElementById('ctx-warn-banner').classList.add('show');
+}
+
+// ─── DISCUSSION ENGINE ───
+function handleStartBtn() {
+  if (state.running) {
+    stopAll();
+  } else {
+    startDiscussion();
+  }
+}
+
+async function startDiscussion() {
+  readCfgFromUI();
+  const userMsg = document.getElementById('user-input').value.trim();
+  if (!userMsg) { toast('Introdu un mesaj de start', 'warn'); return; }
+  if (!cfg.aModel) { toast('Configurează modelul pentru Agent A', 'warn'); return; }
+  if (!cfg.bModel) { toast('Configurează modelul pentru Agent B', 'warn'); return; }
+
+  state.running = true; state.paused = false; state.ending = false;
+  state.warnedCtx = false; state.pendingInject = null;
+  // Keep existing discussion (e.g. summary) — only reset if empty
+  const hasContext = state.discussion.length > 0;
+  if (!hasContext) {
+    state.discussion = [];
+    state.stepCount = 0;
+    document.getElementById('messages').innerHTML = '';
+  }
+  document.getElementById('user-input').value = '';
+  document.getElementById('ctx-warn-banner').classList.remove('show');
+  setUIRunning(true);
+
+  state.discussion.push({role: 'user', content: userMsg, step: state.stepCount});
+  addMessageToUI('user', userMsg, 'Tu');
+  updateCtxBar();
+  autosaveDiscussion();
+
+  state.abortCtrl = new AbortController();
+  try {
+    await runLoop();
+  } catch(e) {
+    if (e.name !== 'AbortError') toast('Eroare: ' + e.message, 'err');
+  }
+  setUIRunning(false);
+}
+
+// ── AUTO-STOP DETECTION ──
+// Patterns that signal an agent considers the discussion finished
+const _DONE_PATTERNS = [
+  /discuți[ae]\s+(este\s+|s[-‑]a\s+)?[îi]nchei[ae]t[ăa]/i,
+  /sesiune\s+[îi]nchis[ăa]/i,
+  /nu\s+(mai\s+)?am\s+nimic\s+de\s+ad[ăa]ugat/i,
+  /nu\s+exist[ăa]\s+alte\s+elemente\s+de\s+(discutat|ad[ăa]ugat)/i,
+  /\[STOP_DISCUSSION\]/i,
+  /\[END_DISCUSSION\]/i,
+  /session\s+(is\s+)?(closed|finished|complete|ended)/i,
+  /discuția\s+s[-‑]a\s+[îi]ncheiat\s+cu\s+succes/i,
+  /am\s+ajuns\s+la\s+un\s+consens\s+complet/i,
+  /nu\s+voi\s+mai\s+r[ăa]spunde/i,
+];
+
+function _detectDone(content) {
+  if (!content) return false;
+  const trimmed = content.trim();
+  // Very short response = only ✅/confirmations, nothing substantive
+  if (trimmed.length < 30 && /^[\s✅✔️🔴☑️\-–•*]+$/.test(trimmed)) return true;
+  return _DONE_PATTERNS.some(p => p.test(content));
+}
+
+async function runLoop() {
+  let cur = cfg.startAgent || 'a';
+  let consecutiveDone = 0;  // how many consecutive turns signaled "done"
+
+  while (state.running) {
+    if (state.paused) {
+      await waitForResume();
+      if (!state.running) break;
+    }
+
+    // Inject pending user message (resets done counter — user restarted discussion)
+    if (state.pendingInject) {
+      const msg = state.pendingInject;
+      state.pendingInject = null;
+      consecutiveDone = 0;
+      state.discussion.push({role: 'user', content: msg, step: state.stepCount});
+      addMessageToUI('user', msg, 'Tu');
+      updateCtxBar();
+    }
+
+    if (state.ending) {
+      await streamTurn(cur, true);
+      if (!state.running) break;
+      const other = cur === 'a' ? 'b' : 'a';
+      await streamTurn(other, true);
+      addSystemMsg('✓ Discuție încheiată. Ambii agenți și-au prezentat concluziile.');
+      state.running = false; state.ending = false;
+      break;
+    }
+
+    // Handle pending web search (triggered by agent in previous turn)
+    if (state.pendingWebSearch) {
+      const {agKey: wsAg, reason, query} = state.pendingWebSearch;
+      state.pendingWebSearch = null;
+      addSystemMsg(`🔍 ${cfg[wsAg+'Name'] || 'Agent'} caută: "${query}"`);
+      try {
+        const wsResult = await runWebSearch(wsAg, reason, query);
+        if (wsResult && wsResult.summary) {
+          state.discussion.push({role: 'system', content: wsResult.summary, step: state.stepCount});
+          state.discussion.push({role: 'user', content: '[INSTRUCȚIUNE SISTEM: Căutarea web s-a finalizat. Rezultatele sunt disponibile mai sus. Folosește aceste informații pentru a răspunde la întrebarea inițială. NU mai efectua alte căutări web.]', step: state.stepCount});
+          _addWsResultBubble(wsResult);
+        } else if (!wsResult) {
+          addSystemMsg('⚠ Web search nu a returnat rezultate. Discuția continuă.');
+          state.discussion.push({role: 'user', content: '[INSTRUCȚIUNE SISTEM: Căutarea web nu a returnat rezultate. Răspunde bazat pe cunoștințele tale, menționând că nu ai putut găsi informații actualizate.]', step: state.stepCount});
+        }
+      } catch(wsErr) {
+        addSystemMsg('⚠ Eroare web search: ' + wsErr.message + '. Discuția continuă.');
+      }
+      // Re-run the same agent with the search result in context (don't rotate cur)
+      cur = wsAg;
+      continue;
+    }
+
+    const maxSteps = cfg.maxSteps || 0;
+    if (maxSteps > 0 && state.stepCount >= maxSteps) {
+      addSystemMsg(`Pași maximi (${maxSteps}) atinși. Apasă "⏹ Încheie" sau oprește manual.`);
+      state.running = false; break;
+    }
+
+    const signalsDone = await streamTurn(cur, false);
+    if (!state.running) break;
+
+    // Human-in-loop: auto-pause after each agent turn
+    if (cfg.humanInLoop && !state.ending) {
+      const agName = cfg[cur + 'Name'] || 'Agent ' + cur.toUpperCase();
+      document.getElementById('inject-label').textContent = `🧑 ${agName} a răspuns — scrie mesajul tău:`;
+      state.paused = true;
+      document.getElementById('inject-panel').classList.add('open');
+      document.getElementById('btn-pause').textContent = '▶ Continuă';
+      document.getElementById('btn-pause').classList.add('warn');
+      await waitForResume();
+      if (!state.running) break;
+      document.getElementById('inject-label').textContent = '⏸ Discuție în pauză — injectează mesaj opțional:';
+    }
+
+    if (signalsDone) {
+      consecutiveDone++;
+      const agentTurns = state.discussion.filter(e => e.role !== 'user').length;
+      if (consecutiveDone >= 2 && agentTurns >= 4) {
+        // Both agents in a row signaled "done" — trigger ending flow (final conclusions)
+        addSystemMsg('🤝 Agenții au semnalat că discuția este încheiată. Se generează concluziile finale...');
+        state.ending = true;
+        consecutiveDone = 0;
+        cur = cur === 'a' ? 'b' : 'a';  // advance so ending starts with next agent
+        continue;
+      } else if (consecutiveDone >= 2) {
+        // Too early (< 4 agent turns total) — reset silently and keep going
+        consecutiveDone = 0;
+      }
+    } else {
+      consecutiveDone = 0;
+    }
+
+    // Count step after second agent responds
+    const isSecond = cur !== (cfg.startAgent || 'a');
+    if (isSecond) {
+      state.stepCount++;
+      document.getElementById('step-counter').textContent = 'Pas ' + state.stepCount;
+    }
+
+    cur = cur === 'a' ? 'b' : 'a';
+  }
+}
+
+async function streamTurn(agKey, isFinal) {
+  const agName = cfg[agKey + 'Name'] || 'Agent ' + agKey.toUpperCase();
+  const msgs = buildContext(agKey, state.discussion);
+
+  if (isFinal) {
+    const signal = '\n\n[INSTRUCȚIUNE SISTEM: Acesta este ultimul tău turn. Prezintă concluzia finală a discuției.]';
+    const last = msgs[msgs.length - 1];
+    if (last && last.role === 'user') {
+      msgs[msgs.length - 1] = {...last, content: last.content + signal};
+    } else {
+      msgs.push({role: 'user', content: signal.trim()});
+    }
+  }
+
+  const wrap = createStreamingBubble(agKey, agName, state.stepCount);
+  let fullContent = '', thinkContent = '', thinkEl = null;
+
+  try {
+    for await (const chunk of apiStream(agKey, msgs, state.abortCtrl.signal)) {
+      if (chunk.error) { toast('Eroare ' + agName + ': ' + chunk.error, 'err'); break; }
+      if (chunk.thinking) {
+        thinkContent += chunk.thinking;
+        if (!thinkEl) thinkEl = ensureThinkBlock(wrap);
+        updateThinkBlock(thinkEl, thinkContent);
+      }
+      if (chunk.content) {
+        fullContent += chunk.content;
+        updateBubbleContent(wrap, fullContent);
+      }
+      if (chunk.done) break;
+    }
+  } catch(e) {
+    if (e.name === 'AbortError') { state.running = false; return; }
+    toast('Stream error: ' + e.message, 'err');
+  }
+
+  finalizeStreamingBubble(wrap);
+  if (fullContent) {
+    state.discussion.push({role: agKey, content: fullContent, step: state.stepCount});
+    updateCtxBar();
+    autosaveDiscussion();
+  }
+  // Detect WEB_SEARCH pattern (check both main content and thinking block)
+  const wsMatch = fullContent.match(/REASON:\s*([^\n]+)\n+WEB_SEARCH:\s*([^\n]{1,300})/)
+               || thinkContent.match(/REASON:\s*([^\n]+)\n+WEB_SEARCH:\s*([^\n]{1,300})/);
+  if (wsMatch && cfg.wsEnabled) {
+    const reason = wsMatch[1].trim();
+    // Clean query: stop at markdown chars, stray tags, or quotes
+    let query = wsMatch[2].trim()
+      .replace(/^["'`]+|["'`]+$/g, '')           // strip surrounding quotes/backticks
+      .replace(/[*#_[\]()]+.*$/s, '')             // stop at markdown formatting chars
+      .replace(/\s*(REASON|WEB_SEARCH):.*$/s, '') // stop at stray tags
+      .replace(/\s+(The |Result|No |As of|Snippet|URL|Title|Based on|I will|I need|Pentru|Căutare|Rezultat).*/i, '') // stop at hallucinated sentence starts
+      .trim()
+      .split(/\s+/).slice(0, 10).join(' ');      // max 10 words
+    state.pendingWebSearch = {agKey, reason, query};
+  }
+  return _detectDone(fullContent);
+}
+
+// ─── HUMAN-IN-LOOP TOGGLE ───
+function toggleHumanInLoop() {
+  cfg.humanInLoop = !cfg.humanInLoop;
+  const btn = document.getElementById('btn-hil');
+  if (cfg.humanInLoop) {
+    btn.classList.add('active');
+    btn.title = 'Human-in-loop: ACTIVAT — pauză după fiecare turn';
+  } else {
+    btn.classList.remove('active');
+    btn.title = 'Human-in-loop: dezactivat';
+  }
+  localStorage.setItem('ai_disc_v2', JSON.stringify(cfg));
+}
+
+// ─── PAUSE / INJECT ───
+function togglePause() {
+  if (!state.running) return;
+  if (state.paused) {
+    resumeDiscussion();
+  } else {
+    state.paused = true;
+    document.getElementById('inject-panel').classList.add('open');
+    document.getElementById('btn-pause').textContent = '▶ Continuă';
+    document.getElementById('btn-pause').classList.add('warn');
+  }
+}
+function resumeDiscussion() {
+  state.paused = false;
+  document.getElementById('inject-panel').classList.remove('open');
+  document.getElementById('btn-pause').textContent = '⏸ Pauză';
+  document.getElementById('btn-pause').classList.remove('warn');
+  document.getElementById('inject-ta').value = '';
+  if (_resumeResolve) { _resumeResolve(); _resumeResolve = null; }
+}
+function injectAndResume() {
+  const txt = document.getElementById('inject-ta').value.trim();
+  if (txt) {
+    const prefix = cfg.injectPrefix || '[Utilizator]:';
+    state.pendingInject = prefix + ' ' + txt;
+  }
+  resumeDiscussion();
+}
+function waitForResume() {
+  return new Promise(res => { _resumeResolve = res; });
+}
+
+function handleSend() {
+  const ta = document.getElementById('user-input');
+  const txt = ta.value.trim();
+  if (!txt) return;
+  if (state.running) {
+    const prefix = cfg.injectPrefix || '[Utilizator]:';
+    state.pendingInject = prefix + ' ' + txt;
+    addMessageToUI('user', txt, 'Tu (inject)');
+    ta.value = ''; ta.style.height = 'auto';
+  } else {
+    startDiscussion();
+  }
+}
+
+// ─── END DISCUSSION ───
+function endDiscussion() {
+  if (!state.running) return;
+  state.ending = true;
+  if (state.paused) resumeDiscussion();
+  addSystemMsg('⏹ Cerere de încheiere — agenții pregătesc concluziile...');
+}
+
+// ─── STOP ALL ───
+function stopAll() {
+  state.running = false; state.paused = false; state.ending = false;
+  if (state.abortCtrl) state.abortCtrl.abort();
+  if (_resumeResolve) { _resumeResolve(); _resumeResolve = null; }
+  setUIRunning(false);
+  addSystemMsg('⏹ Discuție oprită.');
+}
+
+// ─── SUMMARIZE ───
+function openSummModal() { document.getElementById('summ-modal').classList.add('open'); }
+function closeSummModal() { document.getElementById('summ-modal').classList.remove('open'); }
+async function doSummarize() {
+  closeSummModal();
+  await runSummarize(document.getElementById('summ-replace').checked);
+}
+async function runSummarize(replace) {
+  readCfgFromUI();
+  if (!cfg.sModel) { toast('Configurează modelul pentru agentul de sinteză', 'warn'); return; }
+  addSystemMsg('∑ Generez rezumat cu agentul de sinteză...');
+
+  const dialogue = state.discussion
+    .filter(e => e.role !== 'system')
+    .map(e => {
+      const n = e.role === 'user' ? (cfg.injectPrefix || 'Utilizator')
+                : e.role === 'a' ? cfg.aName : cfg.bName;
+      return `**${n}:**\n${e.content}`;
+    }).join('\n\n---\n\n');
+
+  const prompt = (cfg.sSynthPrompt || 'Sumarizează:\n\n{dialogue}').replace('{dialogue}', dialogue);
+  const msgs = [{role: 'user', content: prompt}];
+
+  const wrap = createStreamingBubble('s', cfg.sName || 'Sinteză', null);
+  let summary = '';
+  const ctrl = new AbortController();
+  try {
+    for await (const chunk of apiStream('s', msgs, ctrl.signal)) {
+      if (chunk.error) { toast('Eroare sinteză: ' + chunk.error, 'err'); break; }
+      if (chunk.content) { summary += chunk.content; updateBubbleContent(wrap, summary); }
+      if (chunk.done) break;
+    }
+  } catch(e) { toast('Eroare sinteză: ' + e.message, 'err'); }
+  finalizeStreamingBubble(wrap);
+
+  if (summary) {
+    if (replace) {
+      // Clear chat UI, keeping only the summary bubble
+      const messagesDiv = document.getElementById('messages');
+      [...messagesDiv.children].forEach(el => { if (el !== wrap) el.remove(); });
+      // Insert a system note before the summary bubble
+      const noteEl = document.createElement('div');
+      noteEl.className = 'sys-msg';
+      noteEl.textContent = '∑ Istoricul a fost înlocuit cu rezumatul de mai jos.';
+      messagesDiv.insertBefore(noteEl, wrap);
+
+      state.discussion = [
+        {role: 'system', content: '[Rezumat automat al discuției anterioare]'},
+        {role: 'user', content: '[REZUMAT ANTERIOR]\n' + summary, step: 0}
+      ];
+      state.warnedCtx = false;
+      document.getElementById('ctx-warn-banner').classList.remove('show');
+      updateCtxBar();
+    } else {
+      // Append summary to discussion so it persists on refresh (role 's' = synthesis agent)
+      state.discussion.push({role: 's', content: summary, step: state.stepCount});
+    }
+    autosaveDiscussion();
+  }
+}
+
+// ─── UI HELPERS ───
+function setUIRunning(on) {
+  const btnStart = document.getElementById('btn-start');
+  btnStart.textContent = on ? '⏹ Stop' : '▶ Start';
+  btnStart.className = 'tb-btn' + (on ? ' danger' : ' primary');
+  document.getElementById('btn-pause').disabled = !on;
+  document.getElementById('btn-end').disabled = !on;
+  if (!on) {
+    document.getElementById('inject-panel').classList.remove('open');
+    document.getElementById('btn-pause').textContent = '⏸ Pauză';
+    document.getElementById('btn-pause').classList.remove('warn');
+  }
+}
+
+function _addWsResultBubble(wsResult) {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ws-result';
+  wrap.addEventListener('contextmenu', e => { e.preventDefault(); showCtxMenu(e, wrap); });
+
+  const sourceHtml = wsResult.sourceUrl
+    ? `<div class="ws-result-source">🔗 <a href="${escHtml(wsResult.sourceUrl)}" target="_blank">${escHtml(wsResult.sourceTitle || wsResult.sourceUrl)}</a></div>`
+    : '';
+
+  // Summary without the [WEB SEARCH RESULT] header (it's already shown in the header)
+  const summaryText = (wsResult.summary || '')
+    .replace(/^\[WEB SEARCH RESULT\]\n?Source:[^\n]*\nURL:[^\n]*\n\n?/, '')
+    .trim();
+
+  wrap.innerHTML =
+    `<div class="msg-header"><span class="msg-name" style="color:#22c55e">🔍 Web Search</span><span class="msg-time">${_now()}</span></div>` +
+    `<div class="msg-bubble md-content">` +
+    `<div class="ws-result-header">Rezultat căutare</div>` +
+    sourceHtml +
+    `<div>${renderMd(summaryText)}</div>` +
+    `</div>`;
+
+  appendMsg(wrap);
+  // Render any mermaid diagrams inside
+  renderMermaidIn(wrap);
+}
+
+function addSystemMsg(text) {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg system-msg';
+  wrap.innerHTML = `<div class="msg-bubble">${escHtml(text)}</div>`;
+  appendMsg(wrap);
+}
+
+function addMessageToUI(role, content, name) {
+  const cls = role === 'user' ? 'user' : role === 'a' ? 'agent-a' : role === 'b' ? 'agent-b' : 'agent-s';
+  const color = role === 'user' ? 'var(--accent)'
+               : role === 'a' ? 'var(--agent-a)'
+               : role === 'b' ? 'var(--agent-b)' : 'var(--accent)';
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ' + cls;
+  wrap.innerHTML = `<div class="msg-header"><span class="msg-name" style="color:${color}">${escHtml(name)}</span><span class="msg-time">${_now()}</span></div>
+<div class="msg-bubble md-content">${renderMd(content)}</div>`;
+  wrap.dataset.rawText = content;
+  wrap.setAttribute('data-raw-text', content);
+  wrap.addEventListener('contextmenu', e => { e.preventDefault(); showCtxMenu(e, wrap); });
+  appendMsg(wrap);
+  renderMermaidIn(wrap);
+}
+
+function createStreamingBubble(agKey, agName, step) {
+  const cls = agKey === 'b' ? 'agent-b' : agKey === 's' ? 'agent-s' : 'agent-a';
+  const color = agKey === 'b' ? 'var(--agent-b)' : agKey === 's' ? 'var(--accent)' : 'var(--agent-a)';
+  const stepTxt = step != null ? `<span class="msg-step"> · pas ${step + 1}</span>` : '';
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ' + cls;
+  wrap.innerHTML = `<div class="msg-header"><span class="msg-name" style="color:${color}">${escHtml(agName)}</span>${stepTxt}<span class="msg-time">${_now()}</span></div>
+<div class="msg-bubble md-content typing-cursor"></div>`;
+  wrap.addEventListener('contextmenu', e => { e.preventDefault(); showCtxMenu(e, wrap); });
+  appendMsg(wrap);
+  return wrap;
+}
+
+function updateBubbleContent(wrap, text) {
+  const b = wrap.querySelector('.msg-bubble');
+  if (b) b.innerHTML = renderMd(text);
+  scrollToBottom();
+}
+
+function ensureThinkBlock(wrap) {
+  let th = wrap.querySelector('details.think-block');
+  if (!th) {
+    th = document.createElement('details');
+    th.className = 'think-block';
+    th.innerHTML = '<summary>Gândire internă</summary><pre></pre>';
+    const bubble = wrap.querySelector('.msg-bubble');
+    if (bubble) bubble.before(th);
+  }
+  return th;
+}
+
+function updateThinkBlock(el, text) {
+  const pre = el.querySelector('pre');
+  if (pre) pre.textContent = text;
+}
+
+function finalizeStreamingBubble(wrap) {
+  const b = wrap.querySelector('.msg-bubble');
+  if (b) {
+    b.classList.remove('typing-cursor');
+    // Store raw text for export (use innerText to get plain text)
+    const raw = b.innerText || b.textContent || '';
+    wrap.setAttribute('data-raw-text', raw.trim());
+  }
+  renderMermaidIn(wrap);
+}
+
+function appendMsg(el) {
+  document.getElementById('messages').appendChild(el);
+  scrollToBottom();
+}
+function scrollToBottom() {
+  const c = document.getElementById('messages');
+  requestAnimationFrame(() => { c.scrollTop = c.scrollHeight; });
+}
+
+// ─── SELECTION & EXPORT ───
+const _selectedMsgs = new Set();
+
+function _updateExportUI() {
+  const n = _selectedMsgs.size;
+  const badge = document.getElementById('export-badge');
+  badge.textContent = n;
+  badge.style.display = n > 0 ? 'block' : 'none';
+  document.getElementById('ctx-sel-count').textContent = n;
+  document.getElementById('export-msg-count').textContent = n;
+}
+
+function _toggleSelect(el) {
+  if (_selectedMsgs.has(el)) {
+    _selectedMsgs.delete(el);
+    el.classList.remove('selected-for-export');
+  } else {
+    _selectedMsgs.add(el);
+    el.classList.add('selected-for-export');
+  }
+  _updateExportUI();
+}
+
+function ctxToggleSelect() {
+  document.getElementById('ctx-menu').style.display = 'none';
+  if (_ctxTargetMsg) _toggleSelect(_ctxTargetMsg);
+}
+function ctxSelectAll() {
+  document.getElementById('ctx-menu').style.display = 'none';
+  document.querySelectorAll('#messages .msg[data-raw-text]').forEach(el => {
+    _selectedMsgs.add(el); el.classList.add('selected-for-export');
+  });
+  _updateExportUI();
+}
+function ctxDeselectAll() {
+  document.getElementById('ctx-menu').style.display = 'none';
+  _selectedMsgs.forEach(el => el.classList.remove('selected-for-export'));
+  _selectedMsgs.clear();
+  _updateExportUI();
+}
+function ctxOpenExport() {
+  document.getElementById('ctx-menu').style.display = 'none';
+  if (_selectedMsgs.size === 0) { toast('Niciun mesaj selectat', 'warn'); return; }
+  openExportModal();
+}
+function openExportFromBtn() {
+  if (_selectedMsgs.size === 0) {
+    // Auto-select all exportable messages
+    document.querySelectorAll('#messages .msg[data-raw-text]').forEach(el => {
+      _selectedMsgs.add(el); el.classList.add('selected-for-export');
+    });
+    _updateExportUI();
+    if (_selectedMsgs.size === 0) { toast('Nu există mesaje de exportat', 'warn'); return; }
+  }
+  openExportModal();
+}
+function openExportModal() {
+  document.getElementById('export-msg-count').textContent = _selectedMsgs.size;
+  document.getElementById('export-modal-overlay').classList.add('open');
+  document.getElementById('export-modal').classList.add('open');
+}
+function closeExportModal() {
+  document.getElementById('export-modal-overlay').classList.remove('open');
+  document.getElementById('export-modal').classList.remove('open');
+}
+async function doExport() {
+  if (_selectedMsgs.size === 0) return;
+  const fmt   = document.querySelector('input[name="ex_fmt"]:checked')?.value || 'pdf';
+  const theme = document.querySelector('input[name="ex_theme"]:checked')?.value || 'dark';
+  const btn   = document.getElementById('do-export-btn');
+  btn.disabled = true; btn.textContent = '⏳ Se generează...';
+
+  // Collect messages in DOM order
+  const msgs = [];
+  document.querySelectorAll('#messages .msg[data-raw-text]').forEach(el => {
+    if (_selectedMsgs.has(el)) {
+      const role = el.classList.contains('user') ? 'user' : 'agent';
+      msgs.push({
+        role,
+        text: el.getAttribute('data-raw-text') || '',
+        timestamp: el.querySelector('.msg-time')?.textContent?.trim() || ''
+      });
+    }
+  });
+
+  try {
+    const resp = await fetch('/export_chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({messages: msgs, format: fmt, theme})
+    });
+    if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || 'Export eșuat'); }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chat_export.${fmt}`;
+    a.click();
+    URL.revokeObjectURL(url);
+    closeExportModal();
+    toast(`Export ${fmt.toUpperCase()} descărcat`, 'ok');
+  } catch(err) {
+    toast('Eroare export: ' + err.message, 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = '⬇ Exportează';
+  }
+}
+
+// ─── CONTEXT MENU ───
+function showCtxMenu(e, msgEl) {
+  _ctxTargetMsg = msgEl;
+  // Update toggle label
+  const toggle = document.getElementById('ctx-sel-toggle');
+  toggle.textContent = _selectedMsgs.has(msgEl) ? '☑ Deselectează mesajul' : '☐ Selectează mesajul';
+  const m = document.getElementById('ctx-menu');
+  m.style.display = 'block';
+  m.style.left = Math.min(e.clientX, window.innerWidth - 220) + 'px';
+  m.style.top = Math.min(e.clientY, window.innerHeight - 200) + 'px';
+}
+document.addEventListener('click', () => {
+  document.getElementById('ctx-menu').style.display = 'none';
+});
+function doExportHtml() {
+  if (!_ctxTargetMsg) return;
+  document.getElementById('ctx-menu').style.display = 'none';
+  const includeThink = document.getElementById('ctx-include-think').checked;
+  const clone = _ctxTargetMsg.cloneNode(true);
+  if (!includeThink) { const tb = clone.querySelector('details.think-block'); if (tb) tb.remove(); }
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Export</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<style>body{font-family:'Segoe UI',sans-serif;background:#fff;color:#222;padding:20px;max-width:900px;margin:0 auto}
+.msg-header{margin-bottom:5px}.msg-name{font-weight:700;font-size:12px}
+.msg-bubble{padding:12px 16px;border-radius:8px;line-height:1.6;margin:4px 0}
+.agent-a .msg-bubble{background:#e8f4ff;border-left:4px solid #4a9eff}
+.agent-b .msg-bubble{background:#f3e8ff;border-left:4px solid #a855f7}
+.user .msg-bubble{background:#e8f4fd;border-left:4px solid #1565c0}
+pre{background:#f5f5f5;padding:10px;border-radius:6px;overflow-x:auto;font-size:12px}
+code{background:#f0f0f0;padding:1px 4px;border-radius:3px;font-family:monospace;font-size:.88em}
+table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:4px 9px}
+th{background:#f0f0f0}blockquote{border-left:3px solid #ccc;padding-left:10px;color:#555}
+</style></head><body>${clone.outerHTML}</body></html>`;
+  const a = document.createElement('a');
+  a.href = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
+  a.download = 'message_export.html';
+  a.click();
+}
+function copyMsgText() {
+  if (!_ctxTargetMsg) return;
+  document.getElementById('ctx-menu').style.display = 'none';
+  const text = _ctxTargetMsg.querySelector('.msg-bubble')?.innerText || '';
+  navigator.clipboard.writeText(text)
+    .then(() => toast('Copiat!', 'ok'))
+    .catch(() => toast('Eroare copiere', 'err'));
+}
+
+// ─── TOAST ───
+function toast(msg, type = '') {
+  const w = document.getElementById('toast-wrap');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.textContent = msg;
+  w.appendChild(el);
+  setTimeout(() => {
+    el.style.transition = 'opacity .3s';
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 300);
+  }, 3000);
+}
+
+// ─── MARKDOWN RENDERER ───
+const _saved = [];
+function _saveToken(html) { _saved.push(html); return `\x02${_saved.length - 1}\x03`; }
+function _restoreTokens(s) { return s.replace(/\x02(\d+)\x03/g, (_, i) => _saved[+i] || ''); }
+
+function _renderMath(tex, block) {
+  // Returns raw HTML (not a token) — callers already wrap in _saveToken
+  try {
+    return katex.renderToString(tex, {displayMode: block, throwOnError: false, output: 'html'});
+  } catch(e) {
+    return `<code>${escHtml(tex)}</code>`;
+  }
+}
+
+function _now() {
+  return new Date().toLocaleTimeString('ro-RO', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+function _today() {
+  return new Date().toLocaleDateString('ro-RO', {day:'2-digit', month:'2-digit', year:'numeric'});
+}
+
+function escHtml(t) {
+  return String(t)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function sanitizeMermaid(code) {
+  return code
+    .replace(/[–—]/g, '--')
+    .replace(/₀/g,'0').replace(/₁/g,'1').replace(/₂/g,'2').replace(/₃/g,'3')
+    .replace(/₄/g,'4').replace(/₅/g,'5').replace(/₆/g,'6').replace(/₇/g,'7')
+    .replace(/₈/g,'8').replace(/₉/g,'9')
+    .replace(/⁰/g,'0').replace(/¹/g,'1').replace(/²/g,'2').replace(/³/g,'3')
+    .replace(/⁴/g,'4').replace(/⁵/g,'5').replace(/⁶/g,'6').replace(/⁷/g,'7')
+    .replace(/⁸/g,'8').replace(/⁹/g,'9')
+    // <br> after closing bracket: [Label]<br>extra → ["Label<br/>extra"]
+    .replace(/\[([^\]"<>]*)\]\s*<br\s*\/?>\s*([^\n]*)/g, (m, lbl, extra) => {
+      const ex = extra.trim();
+      if (!ex || /^[-]/.test(ex)) return m;
+      return `["${(lbl.trim() + '<br/>' + ex).replace(/"/g, "'")}"]`;
+    })
+    // <br> inside unquoted brackets: [text<br>more] → ["text<br/>more"]
+    .replace(/\[([^\]"<>]*)<br\s*\/?>([^\]"<>]*)\]/g, (_, a, b) =>
+      `["${(a.trim() + '<br/>' + b.trim()).replace(/"/g, "'")}"]`)
+    // remaining bare <br> → <br/>
+    .replace(/<br\s*>/g, '<br/>')
+    // Parentheses in unquoted node labels → quote them (else parsed as stadium nodes)
+    // e.g.  K[Tick (requestAnimationFrame)]  →  K["Tick (requestAnimationFrame)"]
+    .replace(/\[([^\]"]*[()][^\]"]*)\]/g, m =>
+      `["${m.slice(1,-1).replace(/"/g, "'")}"]`)
+    // Non-ASCII in unquoted node labels → quote them
+    .replace(/\[([^\]"]*[^\x00-\x7E][^\]"]*)\]/g, m =>
+      `["${m.slice(1,-1).replace(/"/g, "'")}"]`)
+    // Curly braces in unquoted labels (diamond nodes use {}, raw { inside [] breaks)
+    .replace(/\[([^\]"]*[{}][^\]"]*)\]/g, m =>
+      `["${m.slice(1,-1).replace(/"/g, "'")}"]`)
+    // Slash / backslash in unquoted labels
+    .replace(/\[([^\]"]*[/\\][^\]"]*)\]/g, m =>
+      `["${m.slice(1,-1).replace(/"/g, "'")}"]`)
+    // Remove stray closing brace on its own line (invalid in pie/xychart/etc.)
+    .replace(/^}\s*$/gm, '')
+    // Fix pie chart: remove wrapping curly braces if present
+    .replace(/^(pie\b.*)\n\{/gm, '$1')
+    // Auto-wrap long unquoted node labels: [Long Label Text] → ["Long<br/>Label Text"]
+    .replace(/\[([^\]"]{32,})\]/g, m => {
+      const label = m.slice(1, -1);
+      const words = label.split(/\s+/);
+      let line = '', lines = [];
+      for (const w of words) {
+        if (line.length + w.length + 1 > 28 && line.length > 0) {
+          lines.push(line); line = w;
+        } else {
+          line = line ? line + ' ' + w : w;
+        }
+      }
+      if (line) lines.push(line);
+      return lines.length > 1 ? `["${lines.join('<br/>')}"]` : m;
+    })
+    // Auto-wrap long quoted node labels with <br/> at word boundaries (~28 chars/line)
+    .replace(/\["([^"]{32,})"\]/g, (m, label) => {
+      if (label.includes('<br/>')) return m; // already has manual breaks
+      const words = label.split(/\s+/);
+      let line = '', lines = [];
+      for (const w of words) {
+        if (line.length + w.length + 1 > 28 && line.length > 0) {
+          lines.push(line); line = w;
+        } else {
+          line = line ? line + ' ' + w : w;
+        }
+      }
+      if (line) lines.push(line);
+      return lines.length > 1 ? `["${lines.join('<br/>')}"]` : m;
+    });
+}
+
+async function renderMermaidIn(container) {
+  const blocks = container.querySelectorAll('.mmd-pending');
+  for (const block of blocks) {
+    block.classList.remove('mmd-pending');
+    const raw = block.dataset.raw || '';
+    const wrap = document.createElement('div');
+    wrap.className = 'mermaid-wrap';
+    try {
+      const id = 'mmd_' + Math.random().toString(36).slice(2);
+      const {svg} = await mermaid.render(id, sanitizeMermaid(raw));
+      wrap.innerHTML = svg;
+    } catch(e) {
+      wrap.className = 'mermaid-err';
+      wrap.innerHTML = `⚠ Mermaid error: ${escHtml(e.message)}<br><pre>${escHtml(raw)}</pre>`;
+    }
+    block.replaceWith(wrap);
+  }
+}
+
+function renderMd(text) {
+  if (!text) return '';
+  _saved.length = 0;
+  let s = String(text);
+
+  // Phase 0: fenced code blocks
+  s = s.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    const l = (lang || '').toLowerCase().trim();
+    if (l === 'mermaid') {
+      return _saveToken(`<div class="mmd-pending" data-raw="${escHtml(code.trim())}"></div>`);
+    }
+    if ((l === 'svg' || l === 'xml') && code.trim().startsWith('<svg')) {
+      return _saveToken(`<div class="svg-wrap">${code.trim()}</div>`);
+    }
+    if (l === 'html') {
+      const encoded = encodeURIComponent(code.trim());
+      return _saveToken(
+        `<div class="html-code-wrap">` +
+        `<div class="html-code-toolbar"><span class="html-code-badge">HTML</span>` +
+        `<button class="run-html-btn" onclick="openHtmlTab(decodeURIComponent(this.dataset.src))" ` +
+        `data-src="${escHtml(encoded)}" title="Deschide în tab nou">▶ Run ↗</button></div>` +
+        `<pre><code class="lang-html">${escHtml(code)}</code></pre></div>`
+      );
+    }
+    return _saveToken(`<pre><code class="lang-${escHtml(l)}">${escHtml(code)}</code></pre>`);
+  });
+  // Inline code
+  s = s.replace(/`([^`\n]+)`/g, (_, c) => _saveToken(`<code>${escHtml(c)}</code>`));
+
+  // Phase 0b: inline SVG written directly (without code fence) — must run before \n→<br>
+  // Captures <svg ...>...</svg> multiline and saves as token to prevent fragmentation
+  s = s.replace(/<svg[\s\S]*?<\/svg>/gi, match =>
+    _saveToken(`<div class="svg-wrap">${match}</div>`)
+  );
+
+  // Phase 1: math
+  s = s.replace(/\\\$/g, '\x01DOLLAR\x01');
+  s = s.replace(/\$\$([\s\S]+?)\$\$/g, (_, m) => _saveToken(`<div class="math-block">${_renderMath(m, true)}</div>`));
+  s = s.replace(/\\\[([\s\S]+?)\\\]/g, (_, m) => _saveToken(`<div class="math-block">${_renderMath(m, true)}</div>`));
+  s = s.replace(/(?:^|\n)\$[ \t]*\n([\s\S]+?)\n\$[ \t]*(?=\n|$)/g,
+    (_, m) => '\n' + _saveToken(`<div class="math-block">${_renderMath(m.trim(), true)}</div>`) + '\n');
+  s = s.replace(/\\\(([^]*?)\\\)/g, (_, m) => _saveToken(_renderMath(m, false)));
+  s = s.replace(/(?<![\\$])\$([^$\n]+?)(?<!\\)\$(?!\$)/g, (_, m) => _saveToken(_renderMath(m, false)));
+  s = s.replace(/\x01DOLLAR\x01/g, '$');
+
+  // Phase 2: headings
+  s = s.replace(/^(#{1,6})\s+(.+)$/gm, (_, h, t) => `<h${h.length}>${t}</h${h.length}>`);
+
+  // Phase 3: HR
+  s = s.replace(/^(?:---|\*\*\*|___)\s*$/gm, '<hr>');
+
+  // Phase 4: blockquote
+  s = s.replace(/^>\s*(.*)$/gm, '<blockquote>$1</blockquote>');
+
+  // Phase 5: tables
+  s = s.replace(/^\|.+\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/gm, tbl => {
+    const lines = tbl.split('\n').filter(l => l.trim());
+    if (lines.length < 2) return tbl;
+    const hdCells = lines[0].split('|').filter((_, i, a) => i > 0 && i < a.length - 1)
+      .map(c => `<th>${c.trim()}</th>`).join('');
+    const body = lines.slice(2).filter(l => l.trim()).map(l =>
+      '<tr>' + l.split('|').filter((_, i, a) => i > 0 && i < a.length - 1)
+        .map(c => `<td>${c.trim()}</td>`).join('') + '</tr>'
+    ).join('');
+    return `<table><thead><tr>${hdCells}</tr></thead><tbody>${body}</tbody></table>`;
+  });
+
+  // Phase 6: lists
+  s = s.replace(/((?:^[ \t]*[-*+] .+\n?)+)/gm, block => {
+    const items = block.trim().split('\n').map(l => '<li>' + l.replace(/^[ \t]*[-*+] /, '').trim() + '</li>');
+    return '<ul>' + items.join('') + '</ul>';
+  });
+  s = s.replace(/((?:^[ \t]*\d+\. .+\n?)+)/gm, block => {
+    const items = block.trim().split('\n').map(l => '<li>' + l.replace(/^[ \t]*\d+\. /, '').trim() + '</li>');
+    return '<ol>' + items.join('') + '</ol>';
+  });
+
+  // Phase 7: inline formatting
+  s = s.replace(/\*\*\*([^*\n]+)\*\*\*/g, '<strong><em>$1</em></strong>');
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+  s = s.replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+  // Phase 8: paragraphs
+  s = s.replace(/\n\n+/g, '</p><p>');
+  s = s.replace(/\n/g, '<br>');
+  s = '<p>' + s + '</p>';
+
+  // Unwrap block elements from <p>
+  s = s.replace(/<p>(<\/?(h[1-6]|hr|table|ul|ol|blockquote|div)[^>]*>)/g, '$1');
+  s = s.replace(/(<\/?(h[1-6]|hr|table|ul|ol|blockquote|div)[^>]*>)<\/p>/g, '$1');
+  s = s.replace(/<p>(\x02\d+\x03)<\/p>/g, '$1');
+  s = s.replace(/<p><\/p>/g, '');
+
+  // ── SPACING CLEANUP ──
+  // Remove stray <br> immediately after a block-closing tag
+  //   e.g. <hr><br><h2> → <hr><h2>  /  </table><br> → </table>
+  s = s.replace(
+    /((?:<\/(?:h[1-6]|table|ul|ol|blockquote|div|pre)>|<hr>|<div[^>]*>))(\s*<br\s*\/?>\s*)+/g,
+    '$1'
+  );
+  // Remove stray <br> immediately before a block-opening tag
+  //   e.g. <br><h2> → <h2>
+  s = s.replace(
+    /(\s*<br\s*\/?>\s*)+((?:<(?:h[1-6]|table|ul|ol|blockquote|div|pre|hr)[^>]*>|\x02\d+\x03))/g,
+    '$2'
+  );
+  // Remove paragraphs that contain only <br> tags (pure whitespace paragraphs)
+  s = s.replace(/<p>(\s*<br\s*\/?>\s*)+<\/p>/g, '');
+
+  return _restoreTokens(s);
+}
+
+// ─── HTML RUNNER (opens in new tab) ───
+
+// Error-catching wrapper injected into every iframe
+const _IFRAME_ERROR_OVERLAY = `
+<style>
+#__err{display:none;position:fixed;bottom:0;left:0;right:0;background:#1a0000;
+  border-top:2px solid #f44336;color:#ff6b6b;font-family:monospace;font-size:12px;
+  padding:8px 12px;max-height:40%;overflow-y:auto;z-index:99999;white-space:pre-wrap}
+#__err summary{cursor:pointer;color:#ff9999;font-weight:bold;margin-bottom:4px;list-style:none}
+#__err summary::before{content:'⚠ JS Error — '}
+</style>
+<details id="__err"><summary></summary><pre id="__err_body"></pre></details>
+<script>
+(function(){
+  var el=document.getElementById('__err');
+  var body=document.getElementById('__err_body');
+  function show(msg,src,line,col,err){
+    el.style.display='block'; el.open=true;
+    var full=err?err.stack||err.toString():msg;
+    document.querySelector('#__err summary').textContent=(src||'')+(line?':'+line:'');
+    body.textContent=full;
+  }
+  window.onerror=function(m,s,l,c,e){show(m,s,l,c,e);return false};
+  window.addEventListener('unhandledrejection',function(e){
+    show(e.reason&&e.reason.message||String(e.reason),'Promise',null,null,e.reason)
+  });
+})();
+<\/script>`;
+
+function _prepareHtml(raw) {
+  const trimmed = raw.trim();
+  // Already a full document
+  if (/^<!DOCTYPE\s|^<html[\s>]/i.test(trimmed)) {
+    // Inject error overlay just after <body> (or before </body> fallback)
+    if (/<body[\s>]/i.test(trimmed)) {
+      return trimmed.replace(/(<body[^>]*>)/i, '$1\n' + _IFRAME_ERROR_OVERLAY);
+    }
+    return trimmed + _IFRAME_ERROR_OVERLAY;
+  }
+  // Fragment — wrap in a proper document
+  return `<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #fff; color: #222; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+${_IFRAME_ERROR_OVERLAY}
+${trimmed}
+</body>
+</html>`;
+}
+
+function openHtmlTab(code) {
+  const blob = new Blob([_prepareHtml(code)], {type: 'text/html'});
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 15000);
+}
+
+// ─── CLEAR CONVERSATION ───
+function clearConversation() {
+  if (state.running) {
+    if (!confirm('Discuția este în curs. O oprești și ștergi tot?')) return;
+    stopAll();
+  } else if (state.discussion.length > 0) {
+    if (!confirm('Ștergi conversația curentă? Acțiunea nu poate fi anulată.')) return;
+  }
+  state.discussion = [];
+  state.stepCount = 0;
+  state.warnedCtx = false;
+  document.getElementById('messages').innerHTML = '';
+  document.getElementById('step-counter').textContent = 'Pas 0';
+  document.getElementById('ctx-bar-fill').style.width = '0%';
+  document.getElementById('ctx-bar-label').textContent = 'Context: 0%';
+  document.getElementById('ctx-warn-banner').classList.remove('show');
+  // Golește cache-ul web search și discuția de pe disc
+  fetch('/api/ws-cache/clear', {method:'POST'}).catch(()=>{});
+  fetch('/api/chat-history', {method:'DELETE'}).catch(()=>{});
+  toast('Conversație ștearsă', 'ok');
+}
+
+async function loadWsCacheStats() {
+  try {
+    const r = await fetch('/api/ws-cache/stats');
+    const s = await r.json();
+    const label = document.getElementById('wsCacheStatsLabel');
+    const box   = document.getElementById('wsCacheEntries');
+    label.textContent = `${s.total} intrări · ${Math.round((s.total_content_size||0)/1024)} KB conținut stocat`;
+    if (s.entries && s.entries.length > 0) {
+      box.style.display = 'block';
+      box.innerHTML = s.entries.map(e => {
+        const age = Math.round((Date.now()/1000 - e.created_at) / 60);
+        const kb  = Math.round((e.content_size||0) / 1024);
+        return `<div style="border-bottom:1px solid var(--border2);padding:3px 0">
+          <b>${(e.title||'(fără titlu)').slice(0,55)}</b><br>
+          <span style="color:var(--text4)">${(e.query||'').slice(0,60)}</span>
+          <span style="float:right">${age}min · ${kb}KB</span>
+        </div>`;
+      }).join('');
+    } else {
+      box.style.display = 'none';
+    }
+  } catch(e) {
+    toast('Eroare la stats cache: ' + e, 'err');
+  }
+}
+
+async function clearWsCache() {
+  if (!confirm('Golești cache-ul web search? Toate rezultatele stocate vor fi șterse.')) return;
+  try {
+    await fetch('/api/ws-cache/clear', {method:'POST'});
+    document.getElementById('wsCacheStatsLabel').textContent = '0 intrări · 0 KB conținut stocat';
+    document.getElementById('wsCacheEntries').style.display = 'none';
+    toast('Cache web search golit', 'ok');
+  } catch(e) {
+    toast('Eroare la golire cache: ' + e, 'err');
+  }
+}
+
+// ─── AUTOSAVE / RESTORE DISCUSSION ───
+
+let _autosaveTimer = null;
+function autosaveDiscussion() {
+  // Debounce — evită scrieri multiple în rafală
+  clearTimeout(_autosaveTimer);
+  _autosaveTimer = setTimeout(() => {
+    const payload = {
+      discussion: state.discussion,
+      savedAt: new Date().toISOString(),
+      stepCount: state.stepCount,
+    };
+    fetch('/api/chat-history', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  }, 500);
+}
+
+async function restoreDiscussionFromDisk() {
+  try {
+    const r = await fetch('/api/chat-history');
+    const d = await r.json();
+    if (!d || !d.discussion || d.discussion.length === 0) return;
+    state.discussion = d.discussion;
+    state.stepCount  = d.stepCount || 0;
+    _rebuildMessagesUI();
+    updateCtxBar();
+    document.getElementById('step-counter').textContent = `Pas ${state.stepCount}`;
+    // suprascrie mesajul din _rebuildMessagesUI
+    const container = document.getElementById('messages');
+    const last = container.lastElementChild;
+    if (last && last.classList.contains('system-msg')) last.remove();
+    addSystemMsg(`📂 Discuție restaurată (${state.discussion.length} intrări, salvat ${d.savedAt ? d.savedAt.replace('T',' ').slice(0,19) : '?'}).`);
+  } catch(e) {}
+}
+
+// ─── PROMPT FULLSCREEN ───
+
+let _fsTargetId = null;
+
+function openPromptFS(id, title, vars) {
+  _fsTargetId = id;
+  document.getElementById('prompt-fs-title').textContent = title;
+  document.getElementById('prompt-fs-vars').textContent = vars;
+  document.getElementById('prompt-fs-textarea').value = document.getElementById(id).value;
+  document.getElementById('prompt-fs-overlay').classList.add('open');
+  document.getElementById('prompt-fs-textarea').focus();
+}
+
+function closePromptFS() {
+  if (_fsTargetId) {
+    document.getElementById(_fsTargetId).value = document.getElementById('prompt-fs-textarea').value;
+  }
+  document.getElementById('prompt-fs-overlay').classList.remove('open');
+  _fsTargetId = null;
+}
+
+// Închide fullscreen cu Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('prompt-fs-overlay').classList.contains('open')) {
+    closePromptFS();
+  }
+});
+
+// ─── SAVE / LOAD SESSION ───
+
+async function saveSession() {
+  readCfgFromUI();
+
+  const now = new Date();
+  const ts = now.toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
+  const stepInfo = `Pas ${state.stepCount}`;
+
+  const sessionData = {
+    version: '2',
+    savedAt: now.toISOString(),
+    appName: 'AI Discussion v2',
+    stepCount: state.stepCount,
+    discussion: state.discussion,
+  };
+
+  const settingsData = {...cfg};
+
+  const readme = [
+    'AI Discussion v2 — Session Snapshot',
+    '=====================================',
+    `Salvat: ${now.toLocaleString('ro-RO')}`,
+    `Pași: ${state.stepCount}`,
+    `Mesaje în discuție: ${state.discussion.length}`,
+    `Agent A: ${cfg.aName} (${cfg.aProvider} / ${cfg.aModel || 'N/A'})`,
+    `Agent B: ${cfg.bName} (${cfg.bProvider} / ${cfg.bModel || 'N/A'})`,
+    '',
+    'Fișiere:',
+    '  session.json  — istoricul discuției',
+    '  settings.json — toate setările (API keys incluse!)',
+    '',
+    'ATENȚIE: settings.json poate conține API keys.',
+    'Nu distribui acest ZIP în mod public.',
+  ].join('\n');
+
+  try {
+    const zip = new JSZip();
+    zip.file('session.json',  JSON.stringify(sessionData,  null, 2));
+    zip.file('settings.json', JSON.stringify(settingsData, null, 2));
+    zip.file('README.txt', readme);
+
+    const blob = await zip.generateAsync({
+      type: 'blob',
+      compression: 'DEFLATE',
+      compressionOptions: {level: 6},
+    });
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ai-discussion_${ts}.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    toast(`Sesiune salvată: ai-discussion_${ts}.zip`, 'ok');
+  } catch(e) {
+    toast('Eroare la salvare: ' + e.message, 'err');
+  }
+}
+
+async function loadSession(input) {
+  const file = input.files[0];
+  input.value = '';   // reset so same file can be reloaded
+  if (!file) return;
+
+  try {
+    toast('Se încarcă sesiunea...');
+    const zip = await JSZip.loadAsync(file);
+
+    // ── settings.json ──
+    const settingsFile = zip.file('settings.json');
+    if (settingsFile) {
+      const raw = await settingsFile.async('string');
+      const loaded = JSON.parse(raw);
+      cfg = {...DEFAULTS, ...loaded};
+      applyCfgToUI();
+      applyColors();
+      saveCfg();
+    }
+
+    // ── session.json ──
+    const sessionFile = zip.file('session.json');
+    if (sessionFile) {
+      const raw = await sessionFile.async('string');
+      const session = JSON.parse(raw);
+
+      if (session.version !== '2') {
+        toast('Format de sesiune necunoscut (versiune ' + session.version + ')', 'warn');
+      }
+
+      // Stop any running discussion
+      if (state.running) stopAll();
+
+      // Restore state
+      state.discussion = session.discussion || [];
+      state.stepCount  = session.stepCount  || 0;
+      state.warnedCtx  = false;
+
+      document.getElementById('step-counter').textContent = 'Pas ' + state.stepCount;
+      document.getElementById('ctx-warn-banner').classList.remove('show');
+
+      // Re-render all messages
+      _rebuildMessagesUI();
+      updateCtxBar();
+
+      const savedAt = session.savedAt ? new Date(session.savedAt).toLocaleString('ro-RO') : '?';
+      toast(`Sesiune restaurată (${state.discussion.length} intrări, salvat ${savedAt})`, 'ok');
+    }
+  } catch(e) {
+    toast('Eroare la încărcare: ' + e.message, 'err');
+    console.error(e);
+  }
+}
+
+function _rebuildMessagesUI() {
+  const container = document.getElementById('messages');
+  container.innerHTML = '';
+
+  for (const entry of state.discussion) {
+    if (entry.role === 'system') {
+      addSystemMsg(entry.content);
+      continue;
+    }
+    const name = entry.role === 'user'
+      ? 'Tu'
+      : entry.role === 'a' ? (cfg.aName || 'Agent A')
+      : entry.role === 'b' ? (cfg.bName || 'Agent B')
+      : (cfg.sName || 'Sinteză');
+    addMessageToUI(entry.role, entry.content, name);
+  }
+
+  addSystemMsg('📂 Sesiune restaurată din snapshot.');
+}
+
+// ─── INPUT RESIZE + ENTER ───
+const _uInput = document.getElementById('user-input');
+_uInput.addEventListener('input', () => {
+  _uInput.style.height = 'auto';
+  _uInput.style.height = Math.min(_uInput.scrollHeight, 200) + 'px';
+});
+_uInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+});
+
+// ─── INIT ───
+loadCfg();
+fetch('/api/settings').then(r => r.json()).then(d => {
+  if (d && Object.keys(d).length > 0) {
+    // Preserve UI-only state fields that come from localStorage, not settings.json
+    const {humanInLoop, ...serverCfg} = d;
+    cfg = {...cfg, ...serverCfg};
+    applyCfgToUI();
+    applyColors();
+  }
+}).catch(() => {});
+restoreDiscussionFromDisk();
+</script>
+</body>
+</html>
