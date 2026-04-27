@@ -1,0 +1,51 @@
+{
+  "name": "ollama-loop-chat",
+  "version": "1.0.0",
+  "description": "Multi-agent AI debate platform with Ollama and web search",
+  "main": "main.js",
+  "author": "Balaurentiu",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build:linux": "electron-builder --linux",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.balaurentiu.ollama-loop-chat",
+    "productName": "Ollama Loop Chat",
+    "files": [
+      "main.js"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist/server",
+        "to": "server",
+        "filter": ["**/*"]
+      }
+    ],
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Utility",
+      "icon": "../assets/icon.png"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "../assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "../assets/icon.icns",
+      "category": "public.app-category.productivity"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

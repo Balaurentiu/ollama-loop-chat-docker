@@ -19,11 +19,23 @@ except ImportError:
     _chat_export = None
 
 app = Flask(__name__)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# When bundled with PyInstaller, read-only assets (index.html) live in sys._MEIPASS.
+# Writable data files (settings.json, chat.json, ws_cache.db) use DATA_DIR,
+# which Electron sets via the OLLAMA_CHAT_DATA env var to the user's app-data folder.
+if getattr(sys, 'frozen', False):
+    ASSET_DIR = sys._MEIPASS
+else:
+    ASSET_DIR = os.path.dirname(os.path.abspath(__file__))
+
+DATA_DIR = os.environ.get('OLLAMA_CHAT_DATA', ASSET_DIR)
+os.makedirs(DATA_DIR, exist_ok=True)
+
+BASE_DIR = ASSET_DIR  # legacy alias used throughout the file
 
 # ── WS SQLITE CACHE ───────────────────────────────────────────────────────────
 
-WS_DB_PATH = os.path.join(BASE_DIR, 'ws_cache.db')
+WS_DB_PATH = os.path.join(DATA_DIR, 'ws_cache.db')
 _db_lock = threading.Lock()
 
 
@@ -135,7 +147,7 @@ def _cache_stats():
 @app.route("/")
 
 def index():
-    return send_from_directory(BASE_DIR, "index.html")
+    return send_from_directory(ASSET_DIR, "index.html")
 
 
 # ── MODELE ───────────────────────────────────────────────────────────────────
@@ -504,7 +516,7 @@ def _stream_anthropic(data):
 
 # ── SETĂRI ────────────────────────────────────────────────────────────────────
 
-SETTINGS_FILE = os.path.join(BASE_DIR, "settings.json")
+SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
 
 
 @app.route("/api/settings", methods=["GET"])
@@ -546,7 +558,7 @@ def ws_cache_stats():
 
 # ── CHAT HISTORY ──────────────────────────────────────────────────────────────
 
-CHAT_FILE = os.path.join(BASE_DIR, "chat.json")
+CHAT_FILE = os.path.join(DATA_DIR, "chat.json")
 
 
 @app.route("/api/chat-history", methods=["GET"])

@@ -1,0 +1,137 @@
+name: Build Installers
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  # ── Linux ──────────────────────────────────────────────────────────────────
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install system deps (for xhtml2pdf / cairo)
+        run: sudo apt-get install -y libcairo2-dev pkg-config build-essential
+
+      - name: Install Python deps + PyInstaller
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Bundle Flask server with PyInstaller
+        run: |
+          pyinstaller \
+            --onedir \
+            --name server \
+            --add-data "index.html:." \
+            --distpath dist \
+            server.py
+
+      - name: Install Electron deps
+        run: cd electron && npm ci
+
+      - name: Build Linux installers
+        run: cd electron && npm run build:linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-AppImage
+          path: electron/dist/*.AppImage
+
+      - name: Upload deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: electron/dist/*.deb
+
+  # ── Windows ────────────────────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Python deps + PyInstaller
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Bundle Flask server with PyInstaller
+        run: |
+          pyinstaller `
+            --onedir `
+            --name server `
+            --add-data "index.html;." `
+            --distpath dist `
+            server.py
+
+      - name: Install Electron deps
+        run: cd electron && npm ci
+
+      - name: Build Windows installer
+        run: cd electron && npm run build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: electron/dist/*.exe
+
+  # ── macOS ──────────────────────────────────────────────────────────────────
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Python deps + PyInstaller
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Bundle Flask server with PyInstaller
+        run: |
+          pyinstaller \
+            --onedir \
+            --name server \
+            --add-data "index.html:." \
+            --distpath dist \
+            server.py
+
+      - name: Install Electron deps
+        run: cd electron && npm ci
+
+      - name: Build macOS DMG
+        run: cd electron && npm run build:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: electron/dist/*.dmg
