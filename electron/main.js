@@ -1,4 +1,9 @@
 const { app, BrowserWindow, shell, dialog } = require('electron');
+
+// Required on Linux when running as AppImage without SUID sandbox
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('no-sandbox');
+}
 const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
