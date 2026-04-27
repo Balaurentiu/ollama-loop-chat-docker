@@ -37,7 +37,7 @@ jobs:
             server.py
 
       - name: Install Electron deps
-        run: cd electron && npm ci
+        run: cd electron && npm install
 
       - name: Build Linux installers
         run: cd electron && npm run build:linux
@@ -83,7 +83,7 @@ jobs:
             server.py
 
       - name: Install Electron deps
-        run: cd electron && npm ci
+        run: cd electron && npm install
 
       - name: Build Windows installer
         run: cd electron && npm run build:win
@@ -123,7 +123,7 @@ jobs:
             server.py
 
       - name: Install Electron deps
-        run: cd electron && npm ci
+        run: cd electron && npm install
 
       - name: Build macOS DMG
         run: cd electron && npm run build:mac

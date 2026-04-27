@@ -6,3 +6,6 @@ ws_cache.db
 chat.json
 settings.json
 *.log
+electron/node_modules/
+dist/
+electron/dist/
