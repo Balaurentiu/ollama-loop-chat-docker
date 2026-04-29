@@ -339,7 +339,18 @@ details.think-block pre{font-size:11px;color:var(--text3);white-space:pre-wrap;m
       <button class="stab" onclick="showSettingsTab('websearch')">Web Search</button>
     </div>
     <div style="flex:1"></div>
-    <button class="tb-btn primary" onclick="saveAndClose()">✓ Salvează &amp; Închide</button>
+    <div style="position:relative;display:inline-block" id="prompts-menu-wrap">
+      <button class="tb-btn" onclick="togglePromptsMenu()" title="Import / Export prompturi">📋 Prompturi ▾</button>
+      <div id="prompts-menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);min-width:170px;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.4)">
+        <div style="padding:4px 0">
+          <button onclick="exportPrompts()" style="width:100%;text-align:left;padding:8px 14px;background:none;border:none;color:var(--text);cursor:pointer;font-size:12px" onmouseover="this.style.background='var(--bg4)'" onmouseout="this.style.background='none'">⬇ Export prompturi (.json)</button>
+          <button onclick="document.getElementById('import-prompts-input').click()" style="width:100%;text-align:left;padding:8px 14px;background:none;border:none;color:var(--text);cursor:pointer;font-size:12px" onmouseover="this.style.background='var(--bg4)'" onmouseout="this.style.background='none'">⬆ Import prompturi (.json)</button>
+          <button onclick="resetPrompts()" style="width:100%;text-align:left;padding:8px 14px;background:none;border:none;color:var(--red);cursor:pointer;font-size:12px" onmouseover="this.style.background='var(--bg4)'" onmouseout="this.style.background='none'">↺ Resetează la default</button>
+        </div>
+      </div>
+    </div>
+    <input type="file" id="import-prompts-input" accept=".json" style="display:none" onchange="importPrompts(this)">
+    <button class="tb-btn primary" onclick="saveAndClose()" style="margin-left:6px">✓ Salvează &amp; Închide</button>
     <button class="tb-btn" onclick="closeSettings()" style="margin-left:6px">✕</button>
   </div>
   <div id="settings-body">
@@ -1030,6 +1041,77 @@ function saveAndClose() {
   applyColors();
   closeSettings();
   toast('Setări salvate', 'ok');
+}
+
+// ─── PROMPT IMPORT / EXPORT ───
+const PROMPT_KEYS = [
+  'aSystem', 'bSystem', 'sSystem', 'sSynthPrompt',
+  'wsOptPrompt', 'wsRankPrompt', 'wsOverviewPrompt', 'wsRelPrompt', 'wsSummPrompt'
+];
+
+function togglePromptsMenu() {
+  const m = document.getElementById('prompts-menu');
+  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+}
+// Close menu on outside click
+document.addEventListener('click', e => {
+  if (!document.getElementById('prompts-menu-wrap').contains(e.target))
+    document.getElementById('prompts-menu').style.display = 'none';
+});
+
+function exportPrompts() {
+  readCfgFromUI();
+  const data = { _version: 1, _exported: new Date().toISOString() };
+  PROMPT_KEYS.forEach(k => { data[k] = cfg[k] || ''; });
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'ollama-chat-prompts.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  document.getElementById('prompts-menu').style.display = 'none';
+  toast('Prompturi exportate', 'ok');
+}
+
+function importPrompts(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      let count = 0;
+      PROMPT_KEYS.forEach(k => {
+        if (data[k] !== undefined) {
+          cfg[k] = data[k];
+          const el = document.getElementById(k);
+          if (el) el.value = data[k];
+          count++;
+        }
+      });
+      saveCfg();
+      toast(`${count} prompturi importate`, 'ok');
+    } catch(err) {
+      toast('Fișier invalid: ' + err.message, 'err');
+    }
+    input.value = '';
+  };
+  reader.readAsText(file);
+  document.getElementById('prompts-menu').style.display = 'none';
+}
+
+function resetPrompts() {
+  if (!confirm('Resetezi toate prompturile la valorile implicite?')) return;
+  PROMPT_KEYS.forEach(k => {
+    if (DEFAULTS[k] !== undefined) {
+      cfg[k] = DEFAULTS[k];
+      const el = document.getElementById(k);
+      if (el) el.value = DEFAULTS[k];
+    }
+  });
+  saveCfg();
+  document.getElementById('prompts-menu').style.display = 'none';
+  toast('Prompturi resetate la default', 'ok');
 }
 function showSettingsTab(tab) {
   document.querySelectorAll('.spage').forEach(p => p.style.display = 'none');
