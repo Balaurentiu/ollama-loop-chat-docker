@@ -18,17 +18,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Python setup + PyInstaller ────────────────────────────────────────
+      # ── Python setup ──────────────────────────────────────────────────────
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install pyinstaller pillow
+          pip install pyinstaller pillow pystray
 
+      # ── Icon conversion ───────────────────────────────────────────────────
       - name: Convert icon PNG → ICO
         run: |
           python -c "
@@ -38,40 +39,33 @@ jobs:
           print('Icon converted')
           "
 
+      # ── Build Flask server ────────────────────────────────────────────────
       - name: Build server with PyInstaller
-        run: pyinstaller server.spec --distpath server_dist_raw
+        run: pyinstaller server.spec --distpath server_dist
 
-      - name: Move dist folder
+      # ── Build tray app ────────────────────────────────────────────────────
+      - name: Build tray app with PyInstaller
+        run: pyinstaller tray_app.spec --distpath tray_dist
+
+      # ── Inno Setup installer ──────────────────────────────────────────────
+      - name: Build installer with Inno Setup
         run: |
-          New-Item -ItemType Directory -Force -Path server_dist
-          Copy-Item -Recurse -Force server_dist_raw\server\* server_dist\
-
-      # ── Node.js + Electron Builder ────────────────────────────────────────
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Electron dependencies
-        working-directory: electron
-        run: npm install
-
-      - name: Build Electron installer
-        working-directory: electron
-        run: npm run dist -- --publish never
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=$version installer.iss
+        shell: pwsh
 
       # ── Upload artifact ───────────────────────────────────────────────────
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: OllamaChat-Windows-Installer
-          path: dist/*.exe
+          path: installer_out/*.exe
           if-no-files-found: error
 
-      # ── Create GitHub Release (only on tag push) ──────────────────────────
+      # ── GitHub Release ────────────────────────────────────────────────────
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.exe
+          files: installer_out/*.exe
           generate_release_notes: true

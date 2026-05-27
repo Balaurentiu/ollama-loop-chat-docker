@@ -7,9 +7,8 @@ __pycache__/
 .claude/
 dist/
 server_dist/
-server_dist_raw/
+tray_dist/
+installer_out/
 build/
-electron/node_modules/
-electron/dist/
 *.spec.bak
 ws_cache.db
