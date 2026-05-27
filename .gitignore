@@ -5,3 +5,11 @@ __pycache__/
 *.bak
 *.bak3
 .claude/
+dist/
+server_dist/
+server_dist_raw/
+build/
+electron/node_modules/
+electron/dist/
+*.spec.bak
+ws_cache.db
