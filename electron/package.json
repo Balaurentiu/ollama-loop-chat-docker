@@ -2,6 +2,11 @@
   "name": "ollama-loop-chat",
   "version": "1.0.0",
   "description": "AI Discussion App powered by Ollama",
+  "author": "Balaurentiu",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Balaurentiu/ollama-loop-chat-docker.git"
+  },
   "main": "main.js",
   "scripts": {
     "start": "electron .",
