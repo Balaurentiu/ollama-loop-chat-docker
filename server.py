@@ -175,6 +175,75 @@ def _cache_stats():
 def index():
     return send_from_directory(ASSET_DIR, "index.html")
 
+# ─── Debug upload page (temporary) ───────────────────────────────────────────
+_debug_uploads = []  # list of {id, filename, comment, time, kind}
+
+@app.route("/debug")
+def debug_page():
+    items_html = ""
+    for u in reversed(_debug_uploads):
+        if u['kind'] == 'text':
+            content_html = f'<pre style="background:#0d0d1a;padding:12px;border-radius:6px;overflow-x:auto;max-height:400px;font-size:12px;color:#ccc;white-space:pre-wrap;word-break:break-all">{u["text"]}</pre>'
+        else:
+            content_html = f'<img src="/debug/img/{u["id"]}" style="max-width:100%;border-radius:6px;border:1px solid #333">'
+        items_html += f"""
+        <div style="border:1px solid #333;border-radius:8px;padding:16px;margin-bottom:20px;background:#1e1e2e">
+          <div style="color:#888;font-size:12px;margin-bottom:4px">{u['time']} &nbsp;·&nbsp; <code style="color:#4a9eff">{u['filename']}</code></div>
+          <div style="color:#fff;font-size:14px;margin-bottom:12px;white-space:pre-wrap">{u['comment'] or '<em style=color:#555>fără comentariu</em>'}</div>
+          {content_html}
+        </div>"""
+    return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Debug Upload</title>
+    <style>body{{background:#111;color:#eee;font-family:sans-serif;max-width:900px;margin:40px auto;padding:0 20px}}
+    input,textarea{{background:#1e1e2e;border:1px solid #444;color:#fff;border-radius:6px;padding:8px;width:100%;box-sizing:border-box;margin-top:6px}}
+    button{{background:#4a9eff;color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:14px;margin-top:10px}}
+    h2{{color:#4a9eff}}</style></head><body>
+    <h2>🐛 Debug Upload</h2>
+    <form method="POST" action="/debug/upload" enctype="multipart/form-data">
+      <label>Fișier (PNG/JPG/TXT/LOG):<br><input type="file" name="file" required></label><br><br>
+      <label>Comentariu / descriere eroare:<br><textarea name="comment" rows="4" placeholder="Descrie ce vezi sau ce s-a întâmplat..."></textarea></label><br>
+      <button type="submit">⬆ Trimite</button>
+    </form>
+    <hr style="border-color:#333;margin:30px 0">
+    <h3>Uploads ({len(_debug_uploads)})</h3>
+    {items_html or '<p style="color:#555">Niciun upload încă.</p>'}
+    <script>setTimeout(()=>location.reload(), 15000)</script>
+    </body></html>"""
+
+@app.route("/debug/upload", methods=["POST"])
+def debug_upload():
+    import uuid, datetime, html as html_lib
+    f = request.files.get("file")
+    if not f:
+        return "no file", 400
+    uid = str(uuid.uuid4())[:8]
+    data = f.read()
+    comment = html_lib.escape(request.form.get("comment", "").strip())
+    fname = f.filename or ''
+    is_text = fname.lower().endswith(('.txt', '.log')) or (f.content_type or '').startswith('text/')
+    entry = {
+        "id": uid, "data": data, "comment": comment,
+        "time": datetime.datetime.now().strftime("%H:%M:%S"),
+        "filename": html_lib.escape(fname),
+        "kind": "text" if is_text else "image",
+    }
+    if is_text:
+        entry["text"] = html_lib.escape(data.decode('utf-8', errors='replace'))
+    _debug_uploads.append(entry)
+    return f"""<html><body style="background:#111;color:#eee;font-family:sans-serif;text-align:center;padding:60px">
+    <h2 style="color:#22c55e">✓ Upload reușit!</h2>
+    <a href="/debug" style="color:#4a9eff">← Înapoi</a></body></html>"""
+
+@app.route("/debug/img/<uid>")
+def debug_img(uid):
+    for u in _debug_uploads:
+        if u["id"] == uid and u["kind"] == "image":
+            from flask import make_response
+            r = make_response(u["data"])
+            r.headers["Content-Type"] = "image/png"
+            return r
+    return "not found", 404
+
 
 # ── MODELE ───────────────────────────────────────────────────────────────────
 
@@ -734,7 +803,9 @@ def _fetch_page_content(url, max_size=30000):
         # Try trafilatura first
         try:
             import trafilatura
-            text = trafilatura.extract(resp.text, include_links=False, include_tables=True)
+            from trafilatura.settings import use_config
+            _tcfg = use_config()
+            text = trafilatura.extract(resp.text, include_links=False, include_tables=True, config=_tcfg)
             if text and len(text.strip()) > 100:
                 return text[:max_size], 'html'
         except ImportError:
