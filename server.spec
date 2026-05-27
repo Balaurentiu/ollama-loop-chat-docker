@@ -1,5 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
+from PyInstaller.utils.hooks import collect_data_files
+
+trafilatura_datas = collect_data_files('trafilatura')
 
 a = Analysis(
     ['server.py'],
@@ -8,7 +11,7 @@ a = Analysis(
     datas=[
         ('index.html', '.'),
         ('assets', 'assets'),
-    ],
+    ] + trafilatura_datas,
     hiddenimports=[
         'flask',
         'flask_cors',
@@ -25,6 +28,12 @@ a = Analysis(
         'reportlab',
         'reportlab.lib',
         'reportlab.platypus',
+        'trafilatura',
+        'trafilatura.settings',
+        'trafilatura.core',
+        'trafilatura.utils',
+        'trafilatura.htmlprocessing',
+        'trafilatura.main_extractor',
     ],
     hookspath=[],
     hooksconfig={},

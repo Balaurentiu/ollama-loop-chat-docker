@@ -808,7 +808,7 @@ def _fetch_page_content(url, max_size=30000):
             text = trafilatura.extract(resp.text, include_links=False, include_tables=True, config=_tcfg)
             if text and len(text.strip()) > 100:
                 return text[:max_size], 'html'
-        except ImportError:
+        except Exception:
             pass
 
         # Fallback: BeautifulSoup
