@@ -3227,6 +3227,14 @@ function clearConversation() {
   // Golește cache-ul web search și discuția de pe disc
   fetch('/api/ws-cache/clear', {method:'POST'}).catch(()=>{});
   fetch('/api/chat-history', {method:'DELETE'}).catch(()=>{});
+  // Resetează starea UI complet
+  state.running = false;
+  state.paused = false;
+  setUIRunning(false);
+  const inp = document.getElementById('user-input');
+  inp.disabled = false;
+  inp.value = '';
+  inp.focus();
   toast('Conversație ștearsă', 'ok');
 }
 
