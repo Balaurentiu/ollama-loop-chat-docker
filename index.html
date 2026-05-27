@@ -2822,8 +2822,17 @@ function openMmdModal(svgHtml) {
 }
 
 function closeMmdModal() {
-  document.getElementById('mmd-modal').classList.remove('open');
-  document.getElementById('mmd-modal-inner').innerHTML = '';
+  const modal = document.getElementById('mmd-modal');
+  const body  = document.getElementById('mmd-modal-body');
+  const inner = document.getElementById('mmd-modal-inner');
+  modal.classList.remove('open');
+  inner.innerHTML = '';
+  // Reset styles modified by openHtmlFullscreen
+  if (modal.dataset.htmlMode) {
+    delete modal.dataset.htmlMode;
+    inner.style.cssText = '';
+    body.style.cssText = '';
+  }
   document.querySelectorAll('#mmd-modal-toolbar button').forEach(b => b.style.display = '');
 }
 
@@ -2998,6 +3007,7 @@ function renderMd(text) {
         `<button class="code-toggle" onclick="toggleHtmlCode('${uid}')" title="Arata/ascunde codul">&#60;/&#62; Cod</button>` +
         `<button class="run-html-btn" onclick="openHtmlTab(decodeURIComponent(this.dataset.src))" ` +
         `data-src="${escHtml(encoded)}" title="Deschide in tab nou">&#8599; Tab nou</button>` +
+        `<button class="run-html-btn" onclick="saveHtmlBlock(document.getElementById('${uid}'))" title="Salvează ca fișier HTML">&#x1F4BE; Salvează</button>` +
         `</div>` +
         `<div class="html-iframe-wrap">` +
         `<iframe sandbox="allow-scripts allow-same-origin" data-src="${escHtml(encoded)}"></iframe>` +
@@ -3160,20 +3170,38 @@ function toggleHtmlCode(uid) {
   if (wrap) wrap.querySelector('.code-section').classList.toggle('open');
 }
 
+function saveHtmlBlock(wrap) {
+  const iframe = wrap && wrap.querySelector('iframe');
+  if (!iframe) return;
+  const code = decodeURIComponent(iframe.dataset.src || '');
+  const html = _prepareHtml(code);
+  const blob = new Blob([html], {type: 'text/html'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g, '-');
+  a.download = `bloc-html-${ts}.html`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 function openHtmlFullscreen(wrap) {
   const iframe = wrap && wrap.querySelector('iframe');
   if (!iframe) return;
   const code = decodeURIComponent(iframe.dataset.src || '');
   const modal = document.getElementById('mmd-modal');
+  const body  = document.getElementById('mmd-modal-body');
   const inner = document.getElementById('mmd-modal-inner');
   inner.innerHTML = '';
+  inner.style.cssText = 'width:100%;height:100%;display:block';
+  body.style.cssText = body.style.cssText + ';align-items:stretch;padding:0';
   const fr = document.createElement('iframe');
   fr.sandbox = 'allow-scripts allow-same-origin';
-  fr.style.cssText = 'width:100%;height:80vh;border:none;border-radius:6px;background:#fff';
+  fr.style.cssText = 'width:100%;height:100%;border:none;background:#fff;display:block';
   fr.srcdoc = _prepareHtml(code);
   inner.appendChild(fr);
   document.querySelectorAll('#mmd-modal-toolbar button:not(:last-child)').forEach(b => b.style.display = 'none');
   modal.classList.add('open');
+  modal.dataset.htmlMode = '1';
 }
 
 function _initHtmlIframes(container) {

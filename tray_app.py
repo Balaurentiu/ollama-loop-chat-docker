@@ -106,7 +106,7 @@ class TrayApp:
         self.root = tk.Tk()
         self.root.title('Ollama Chat — Server Manager')
         self.root.geometry('520x540')
-        self.root.resizable(False, True)
+        self.root.resizable(True, True)
         self.root.protocol('WM_DELETE_WINDOW', self._hide_admin)
         try:
             self.root.iconbitmap(os.path.join(_base(), 'assets', 'icon.ico'))
