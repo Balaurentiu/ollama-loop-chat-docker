@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -38,10 +41,10 @@ jobs:
       - name: Build server with PyInstaller
         run: pyinstaller server.spec --distpath server_dist_raw
 
-      - name: Rename dist folder
+      - name: Move dist folder
         run: |
-          mkdir -p server_dist
-          xcopy /E /I server_dist_raw\server server_dist\
+          New-Item -ItemType Directory -Force -Path server_dist
+          Copy-Item -Recurse -Force server_dist_raw\server\* server_dist\
 
       # ── Node.js + Electron Builder ────────────────────────────────────────
       - name: Set up Node.js
@@ -55,12 +58,10 @@ jobs:
 
       - name: Build Electron installer
         working-directory: electron
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run dist
+        run: npm run dist -- --publish never
 
-      # ── Upload artifacts ──────────────────────────────────────────────────
-      - name: Upload installer
+      # ── Upload artifact ───────────────────────────────────────────────────
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: OllamaChat-Windows-Installer
@@ -68,11 +69,9 @@ jobs:
           if-no-files-found: error
 
       # ── Create GitHub Release (only on tag push) ──────────────────────────
-      - name: Create Release
+      - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.exe
           generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
