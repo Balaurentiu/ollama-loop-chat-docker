@@ -3587,11 +3587,14 @@ function _applyReadOnly() {
     if (el) { el.disabled = ro; el.title = ro ? 'Read-only — preia controlul pentru a acționa' : ''; }
   });
   const inp = document.getElementById('user-input');
-  // In one-agent mode paused waiting for user, don't override the enabled state
+  // Don't disable input when: paused waiting for user reply, or discussion not running (idle state)
   const inpPausedForUser = state && state.paused && (cfg.discussionMode === 'one-agent' || cfg.discussionMode === 'two-agents-hil');
-  if (inp && !inpPausedForUser) inp.disabled = ro;
+  const inpIdle = state && !state.running;
+  if (inp && !inpPausedForUser && !inpIdle) inp.disabled = ro;
+  if (inp && inpIdle) inp.disabled = false;
   const sendBtn = document.getElementById('btn-send');
-  if (sendBtn && !inpPausedForUser) sendBtn.disabled = ro;
+  if (sendBtn && !inpPausedForUser && !inpIdle) sendBtn.disabled = ro;
+  if (sendBtn && inpIdle) sendBtn.disabled = false;
   // Settings save button
   document.querySelectorAll('#settings-overlay .tb-btn.primary').forEach(el => {
     el.disabled = ro;
