@@ -30,7 +30,7 @@ Source: "server_dist\server\*"; DestDir: "{app}\server"; Flags: ignoreversion re
 [Icons]
 Name: "{group}\Ollama Chat";        Filename: "{app}\OllamaChat.exe"
 Name: "{group}\Dezinstalează";      Filename: "{uninstallexe}"
-Name: "{commondesktop}\Ollama Chat"; Filename: "{app}\OllamaChat.exe"; Tasks: desktopicon
+Name: "{userdesktop}\Ollama Chat"; Filename: "{app}\OllamaChat.exe"; Tasks: desktopicon
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "OllamaChat"; ValueData: """{app}\OllamaChat.exe"""; Flags: uninsdeletevalue; Tasks: startupicon

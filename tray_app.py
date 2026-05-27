@@ -104,9 +104,16 @@ class TrayApp:
         self.admin_win   = None
 
         self.root = tk.Tk()
-        self.root.withdraw()
-        self.root.title(APP_NAME)
+        self.root.title('Ollama Chat — Server Manager')
+        self.root.geometry('520x540')
+        self.root.resizable(False, True)
         self.root.protocol('WM_DELETE_WINDOW', self._hide_admin)
+        try:
+            self.root.iconbitmap(os.path.join(_base(), 'assets', 'icon.ico'))
+        except Exception:
+            pass
+        self._build_admin_ui(self.root)
+        self.root.withdraw()   # hide until user opens it
 
     # ── Server management ────────────────────────────────────────────────────
     def _start_server(self):
@@ -184,29 +191,15 @@ class TrayApp:
 
     # ── Admin window ─────────────────────────────────────────────────────────
     def _show_admin(self):
-        if self.admin_win and self.admin_win.winfo_exists():
-            self.admin_win.lift()
-            self.admin_win.focus_force()
-            return
-        self._build_admin()
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
 
     def _hide_admin(self):
-        if self.admin_win:
-            self.admin_win.withdraw()
+        self.root.withdraw()
 
-    def _build_admin(self):
-        w = tk.Toplevel(self.root)
-        w.title('Ollama Chat — Server Manager')
-        w.geometry('520x540')
-        w.resizable(False, True)
-        w.protocol('WM_DELETE_WINDOW', self._hide_admin)
-        self.admin_win = w
-
-        try:
-            w.iconbitmap(os.path.join(_base(), 'assets', 'icon.ico'))
-        except Exception:
-            pass
-
+    def _build_admin_ui(self, w):
+        """Build admin UI widgets into window w (called once on root)."""
         pad = dict(padx=12, pady=4)
 
         # ── Status bar ───────────────────────────────────────────────────────
@@ -260,11 +253,10 @@ class TrayApp:
             wrap='word', relief='flat')
         self._log_box.pack(fill='both', expand=True, padx=4, pady=4)
 
-        self._refresh_admin()
         self._poll_admin()
 
     def _refresh_admin(self):
-        if not self.admin_win or not self.admin_win.winfo_exists():
+        if not self.root.winfo_exists():
             return
         alive = server_alive(self.port)
         if alive:
@@ -281,7 +273,7 @@ class TrayApp:
             self._lbl_uptime.config(text='')
 
     def _poll_admin(self):
-        if not self.admin_win or not self.admin_win.winfo_exists():
+        if not self.root.winfo_exists():
             return
         self._refresh_admin()
         # Flush log queue into text widget
@@ -294,13 +286,12 @@ class TrayApp:
         if lines:
             self._log_box.config(state='normal')
             self._log_box.insert('end', '\n'.join(lines) + '\n')
-            # Keep only last LOG_LINES lines
             total = int(self._log_box.index('end-1c').split('.')[0])
             if total > LOG_LINES:
                 self._log_box.delete('1.0', f'{total - LOG_LINES}.0')
             self._log_box.see('end')
             self._log_box.config(state='disabled')
-        self.admin_win.after(1000, self._poll_admin)
+        self.root.after(1000, self._poll_admin)
 
     def _apply_port(self):
         try:
