@@ -200,11 +200,9 @@ class TrayApp:
 
     def _build_admin_ui(self, w):
         """Build admin UI widgets into window w (called once on root)."""
-        pad = dict(padx=12, pady=4)
-
         # ── Status bar ───────────────────────────────────────────────────────
         sf = ttk.LabelFrame(w, text='Status server')
-        sf.pack(fill='x', **pad, pady=(12,4))
+        sf.pack(fill='x', padx=12, pady=(12,4))
 
         self._lbl_status = tk.Label(sf, text='', font=('Segoe UI', 10, 'bold'), anchor='w')
         self._lbl_status.pack(fill='x', padx=8, pady=4)
@@ -214,7 +212,7 @@ class TrayApp:
 
         # ── Action buttons ───────────────────────────────────────────────────
         bf = ttk.Frame(w)
-        bf.pack(fill='x', **pad, pady=4)
+        bf.pack(fill='x', padx=12, pady=4)
 
         ttk.Button(bf, text='▶  Deschide în Browser',
                    command=self._open_browser).pack(side='left', padx=(0,6))
@@ -225,7 +223,7 @@ class TrayApp:
 
         # ── Port config ──────────────────────────────────────────────────────
         pf = ttk.LabelFrame(w, text='Configurare')
-        pf.pack(fill='x', **pad, pady=4)
+        pf.pack(fill='x', padx=12, pady=4)
 
         row1 = ttk.Frame(pf)
         row1.pack(fill='x', padx=8, pady=6)
@@ -245,7 +243,7 @@ class TrayApp:
 
         # ── Log ──────────────────────────────────────────────────────────────
         lf = ttk.LabelFrame(w, text='Log server')
-        lf.pack(fill='both', expand=True, **pad, pady=(4,12))
+        lf.pack(fill='both', expand=True, padx=12, pady=(4,12))
 
         self._log_box = scrolledtext.ScrolledText(
             lf, height=12, font=('Consolas', 9),
