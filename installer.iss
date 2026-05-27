@@ -18,7 +18,7 @@ UninstallDisplayIcon={app}\OllamaChat.exe
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Crează shortcut pe Desktop"; GroupDescription: "Shortcut-uri:"; Flags: checked
+Name: "desktopicon"; Description: "Crează shortcut pe Desktop"; GroupDescription: "Shortcut-uri:"
 Name: "startupicon"; Description: "Pornire automată cu Windows"; GroupDescription: "Startup:"; Flags: unchecked
 
 [Files]
