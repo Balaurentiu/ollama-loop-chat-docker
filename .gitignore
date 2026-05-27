@@ -1,0 +1,6 @@
+settings.json
+chat.json
+__pycache__/
+*.pyc
+*.bak
+*.bak3
