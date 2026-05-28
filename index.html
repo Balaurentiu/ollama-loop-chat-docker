@@ -1977,11 +1977,15 @@ function _detectDone(content) {
 }
 
 async function runLoop() {
-  const isOneAgent = cfg.discussionMode === 'one-agent';
-  let cur = isOneAgent ? (cfg.oneAgentKey || 'a') : (cfg.startAgent || 'a');
+  let cur = (cfg.discussionMode === 'one-agent') ? (cfg.oneAgentKey || 'a') : (cfg.startAgent || 'a');
   let consecutiveDone = 0;  // how many consecutive turns signaled "done"
 
   while (state.running) {
+    // Re-read mode each iteration so mid-conversation mode switches take effect
+    const isOneAgent = cfg.discussionMode === 'one-agent';
+    // Sync cur when switching to one-agent mid-conversation
+    if (isOneAgent) cur = cfg.oneAgentKey || 'a';
+
     if (state.paused) {
       await waitForResume();
       if (!state.running) break;
@@ -2067,8 +2071,6 @@ async function runLoop() {
       if (!state.running) break;
       state.stepCount++;
       document.getElementById('step-counter').textContent = 'Pas ' + state.stepCount;
-      // Re-read agent selection dynamically — user may have switched agent during pause
-      cur = cfg.oneAgentKey || 'a';
       continue;
     }
 
