@@ -368,6 +368,7 @@ def _stream_ollama(data):
     think      = data.get("thinkEnabled", False)
     force_cpu  = data.get("forceCpu", False)
     keep_alive = data.get("keepAlive", "")
+    timeout    = int(data.get("requestTimeout", 300))
 
     if system:
         msgs = [{"role": "system", "content": system}] + msgs
@@ -389,7 +390,7 @@ def _stream_ollama(data):
 
     try:
         with requests.post(
-            f"{server}/api/chat", json=payload, stream=True, timeout=300
+            f"{server}/api/chat", json=payload, stream=True, timeout=timeout
         ) as resp:
             if not resp.ok:
                 try:
@@ -446,6 +447,7 @@ def _stream_openai(data):
     system     = data.get("systemPrompt", "")
     temp       = data.get("temperature", 0.7)
     max_tokens = data.get("contextSize", 4096)
+    timeout    = int(data.get("requestTimeout", 300))
 
     if system:
         msgs = [{"role": "system", "content": system}] + msgs
@@ -465,7 +467,7 @@ def _stream_openai(data):
     try:
         with requests.post(
             "https://api.openai.com/v1/chat/completions",
-            headers=headers, json=payload, stream=True, timeout=300,
+            headers=headers, json=payload, stream=True, timeout=timeout,
         ) as resp:
             resp.raise_for_status()
             for line in resp.iter_lines():
@@ -498,6 +500,7 @@ def _stream_gemini(data):
     msgs       = list(data.get("messages", []))
     system     = data.get("systemPrompt", "")
     temp       = data.get("temperature", 0.7)
+    timeout    = int(data.get("requestTimeout", 300))
     max_tokens = data.get("contextSize", 4096)
 
     # Conversie mesaje → format Gemini (alternare user/model obligatorie)
@@ -533,7 +536,7 @@ def _stream_gemini(data):
     )
 
     try:
-        with requests.post(url, json=payload, stream=True, timeout=300) as resp:
+        with requests.post(url, json=payload, stream=True, timeout=timeout) as resp:
             resp.raise_for_status()
             for line in resp.iter_lines():
                 if not line:
@@ -565,6 +568,7 @@ def _stream_anthropic(data):
     msgs       = list(data.get("messages", []))
     system     = data.get("systemPrompt", "")
     temp       = data.get("temperature", 0.7)
+    timeout    = int(data.get("requestTimeout", 300))
     max_tokens = data.get("contextSize", 4096)
 
     # Anthropic: mesajele trebuie sa alterneze user/assistant, sa inceapa cu user
@@ -597,7 +601,7 @@ def _stream_anthropic(data):
     try:
         with requests.post(
             "https://api.anthropic.com/v1/messages",
-            headers=headers, json=payload, stream=True, timeout=300,
+            headers=headers, json=payload, stream=True, timeout=timeout,
         ) as resp:
             resp.raise_for_status()
             for line in resp.iter_lines():

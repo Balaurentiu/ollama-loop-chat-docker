@@ -628,6 +628,7 @@ details.think-block pre{font-size:11px;color:var(--text3);white-space:pre-wrap;m
       <div class="global-settings">
         <h3>Setări generale</h3>
         <div class="frow"><label>Pași maximi (0 = nelimitat)</label><input id="maxSteps" type="number" value="0" min="0" max="9999"></div>
+        <div class="frow"><label title="Timeout request LLM în secunde — mărește pentru modele lente">Timeout LLM (secunde)</label><input id="requestTimeout" type="number" value="300" min="30" max="3600"></div>
         <div class="srow"><label>Auto-sumarizare la 90% context</label>
           <label class="toggle"><input type="checkbox" id="autoSumm" checked><span class="slider"></span></label>
         </div>
@@ -982,7 +983,7 @@ const DEFAULTS = {
   sTemp:0.5, sCtx:8192, sThink:false, sForceCpu:false, sKeepAlive:'',
   sSynthPrompt:'### Sumarizează dialogul următor într-un rezumat structurat și complet:\n\n{dialogue}\n\n### REZUMAT FINAL:',
 
-  maxSteps:0, autoSumm:true, startAgent:'a', injectPrefix:'[Utilizator]:', humanInLoop:false,
+  maxSteps:0, autoSumm:true, startAgent:'a', injectPrefix:'[Utilizator]:', humanInLoop:false, requestTimeout:300,
   discussionMode:'two-agents', oneAgentKey:'a',
 
   wsEnabled: false,
@@ -1174,6 +1175,7 @@ function readCfgFromUI() {
   cfg.bKeepAlive = document.getElementById('bKeepAlive').value;
   cfg.sKeepAlive = document.getElementById('sKeepAlive').value;
   cfg.maxSteps = parseInt(document.getElementById('maxSteps').value) || 0;
+  cfg.requestTimeout = parseInt(document.getElementById('requestTimeout').value) || 300;
   cfg.autoSumm = document.getElementById('autoSumm').checked;
   cfg.startAgent = document.getElementById('startAgent').value;
   cfg.wsEnabled = document.getElementById('wsEnabled').checked;
@@ -1223,6 +1225,7 @@ function applyCfgToUI() {
     document.getElementById(ag+'KeepAlive').value = cfg[ag+'KeepAlive'] || '';
   });
   document.getElementById('maxSteps').value = cfg.maxSteps || 0;
+  document.getElementById('requestTimeout').value = cfg.requestTimeout || 300;
   document.getElementById('autoSumm').checked = cfg.autoSumm !== false;
   document.getElementById('startAgent').value = cfg.startAgent || 'a';
   onProviderChange('a'); onProviderChange('b'); onProviderChange('s');
@@ -1787,6 +1790,7 @@ async function* apiStream(agKey, messages, signal) {
     thinkEnabled: cfg[agKey + 'Think'] || false,
     forceCpu: cfg[agKey + 'ForceCpu'] || false,
     keepAlive: cfg[agKey + 'KeepAlive'] || '',
+    requestTimeout: cfg.requestTimeout || 300,
   };
   if (prov === 'ollama') body.serverUrl = cfg[agKey + 'ServerUrl'];
   else body.apiKey = cfg[agKey + 'ApiKey'];
