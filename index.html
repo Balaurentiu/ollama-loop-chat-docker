@@ -480,6 +480,9 @@ details.think-block pre{font-size:11px;color:var(--text3);white-space:pre-wrap;m
         <div class="srow" id="aThinkRow"><label>Think (Ollama)</label>
           <label class="toggle"><input type="checkbox" id="aThink"><span class="slider"></span></label>
         </div>
+        <div class="srow"><label title="Trimite num_gpu=0 către Ollama — forțează rularea pe CPU">Forțează CPU (Ollama)</label>
+          <label class="toggle"><input type="checkbox" id="aForceCpu"><span class="slider"></span></label>
+        </div>
       </div>
 
       <!-- AGENT B -->
@@ -518,6 +521,9 @@ details.think-block pre{font-size:11px;color:var(--text3);white-space:pre-wrap;m
         <div class="srow" id="bThinkRow"><label>Think (Ollama)</label>
           <label class="toggle"><input type="checkbox" id="bThink"><span class="slider"></span></label>
         </div>
+        <div class="srow"><label title="Trimite num_gpu=0 către Ollama — forțează rularea pe CPU">Forțează CPU (Ollama)</label>
+          <label class="toggle"><input type="checkbox" id="bForceCpu"><span class="slider"></span></label>
+        </div>
       </div>
 
       <!-- SYNTH AGENT -->
@@ -554,6 +560,9 @@ details.think-block pre{font-size:11px;color:var(--text3);white-space:pre-wrap;m
         <div class="frow"><label>Context Size (tokens)</label><input id="sCtx" type="number" value="8192" min="512" max="131072"></div>
         <div class="srow" id="sThinkRow"><label>Think (Ollama)</label>
           <label class="toggle"><input type="checkbox" id="sThink"><span class="slider"></span></label>
+        </div>
+        <div class="srow"><label title="Trimite num_gpu=0 către Ollama — forțează rularea pe CPU">Forțează CPU (Ollama)</label>
+          <label class="toggle"><input type="checkbox" id="sForceCpu"><span class="slider"></span></label>
         </div>
         <div class="section-divider"></div>
         <div class="frow"><label>Prompt Sumarizare (variabilă: {dialogue})</label>
@@ -912,17 +921,17 @@ const DEFAULTS = {
   aName:'Agent A', aColor:'#4a9eff', aProvider:'ollama',
   aServerUrl:'http://localhost:11434', aApiKey:'', aModel:'',
   aSystem:'Ești Agent A. Discuți cu Agent B pe tema dată de utilizator. Fii direct, analitic și constructiv.',
-  aTemp:0.7, aCtx:4096, aThink:false,
+  aTemp:0.7, aCtx:4096, aThink:false, aForceCpu:false,
 
   bName:'Agent B', bColor:'#a855f7', bProvider:'ollama',
   bServerUrl:'http://localhost:11434', bApiKey:'', bModel:'',
   bSystem:'Ești Agent B. Discuți cu Agent A pe tema dată de utilizator. Aduce perspective noi și pune întrebări relevante.',
-  bTemp:0.7, bCtx:4096, bThink:false,
+  bTemp:0.7, bCtx:4096, bThink:false, bForceCpu:false,
 
   sName:'Sinteză', sProvider:'ollama',
   sServerUrl:'http://localhost:11434', sApiKey:'', sModel:'',
   sSystem:'Ești un agent de sinteză. Generează un rezumat structurat, clar și complet al dialogului, păstrând toate informațiile importante.',
-  sTemp:0.5, sCtx:8192, sThink:false,
+  sTemp:0.5, sCtx:8192, sThink:false, sForceCpu:false,
   sSynthPrompt:'### Sumarizează dialogul următor într-un rezumat structurat și complet:\n\n{dialogue}\n\n### REZUMAT FINAL:',
 
   maxSteps:0, autoSumm:true, startAgent:'a', injectPrefix:'[Utilizator]:', humanInLoop:false,
@@ -1110,6 +1119,9 @@ function readCfgFromUI() {
   cfg.aThink = document.getElementById('aThink').checked;
   cfg.bThink = document.getElementById('bThink').checked;
   cfg.sThink = document.getElementById('sThink').checked;
+  cfg.aForceCpu = document.getElementById('aForceCpu').checked;
+  cfg.bForceCpu = document.getElementById('bForceCpu').checked;
+  cfg.sForceCpu = document.getElementById('sForceCpu').checked;
   cfg.maxSteps = parseInt(document.getElementById('maxSteps').value) || 0;
   cfg.autoSumm = document.getElementById('autoSumm').checked;
   cfg.startAgent = document.getElementById('startAgent').value;
@@ -1156,6 +1168,7 @@ function applyCfgToUI() {
     document.getElementById(ag+'TempVal').textContent = tv.toFixed(2);
     document.getElementById(ag+'Ctx').value = cfg[ag+'Ctx'] || (ag==='s'?8192:4096);
     document.getElementById(ag+'Think').checked = !!cfg[ag+'Think'];
+    document.getElementById(ag+'ForceCpu').checked = !!cfg[ag+'ForceCpu'];
   });
   document.getElementById('maxSteps').value = cfg.maxSteps || 0;
   document.getElementById('autoSumm').checked = cfg.autoSumm !== false;
@@ -1720,6 +1733,7 @@ async function* apiStream(agKey, messages, signal) {
     temperature: cfg[agKey + 'Temp'],
     contextSize: cfg[agKey + 'Ctx'],
     thinkEnabled: cfg[agKey + 'Think'] || false,
+    forceCpu: cfg[agKey + 'ForceCpu'] || false,
   };
   if (prov === 'ollama') body.serverUrl = cfg[agKey + 'ServerUrl'];
   else body.apiKey = cfg[agKey + 'ApiKey'];

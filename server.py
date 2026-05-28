@@ -363,18 +363,23 @@ def _stream_ollama(data):
     model   = data.get("model", "")
     msgs    = list(data.get("messages", []))
     system  = data.get("systemPrompt", "")
-    temp    = data.get("temperature", 0.7)
-    ctx     = data.get("contextSize", 4096)
-    think   = data.get("thinkEnabled", False)
+    temp      = data.get("temperature", 0.7)
+    ctx       = data.get("contextSize", 4096)
+    think     = data.get("thinkEnabled", False)
+    force_cpu = data.get("forceCpu", False)
 
     if system:
         msgs = [{"role": "system", "content": system}] + msgs
+
+    options = {"num_ctx": ctx, "temperature": temp}
+    if force_cpu:
+        options["num_gpu"] = 0
 
     payload = {
         "model": model,
         "messages": msgs,
         "stream": True,
-        "options": {"num_ctx": ctx, "temperature": temp},
+        "options": options,
     }
     if think:
         payload["think"] = True
