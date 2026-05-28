@@ -489,8 +489,14 @@ details.think-block pre{font-size:11px;color:var(--text3);white-space:pre-wrap;m
             oninput="document.getElementById('aTempVal').textContent=parseFloat(this.value).toFixed(2)">
         </div>
         <div class="frow"><label>Context Size (tokens)</label><input id="aCtx" type="number" value="4096" min="512" max="131072"></div>
-        <div class="srow" id="aThinkRow"><label>Think (Ollama)</label>
-          <label class="toggle"><input type="checkbox" id="aThink"><span class="slider"></span></label>
+        <div class="frow" id="aThinkRow"><label title="Buget tokeni pentru gândire internă Ollama">Think (Ollama)</label>
+          <select id="aThink" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);border-radius:4px;padding:3px 6px;font-size:12px">
+            <option value="off">Dezactivat</option>
+            <option value="min">Minim (256)</option>
+            <option value="normal">Normal (1024)</option>
+            <option value="extended">Extins (4096)</option>
+            <option value="max">Maxim (∞)</option>
+          </select>
         </div>
         <div class="srow"><label title="Trimite num_gpu=0 către Ollama — forțează rularea pe CPU">Forțează CPU (Ollama)</label>
           <label class="toggle"><input type="checkbox" id="aForceCpu"><span class="slider"></span></label>
@@ -542,8 +548,14 @@ details.think-block pre{font-size:11px;color:var(--text3);white-space:pre-wrap;m
             oninput="document.getElementById('bTempVal').textContent=parseFloat(this.value).toFixed(2)">
         </div>
         <div class="frow"><label>Context Size (tokens)</label><input id="bCtx" type="number" value="4096" min="512" max="131072"></div>
-        <div class="srow" id="bThinkRow"><label>Think (Ollama)</label>
-          <label class="toggle"><input type="checkbox" id="bThink"><span class="slider"></span></label>
+        <div class="frow" id="bThinkRow"><label title="Buget tokeni pentru gândire internă Ollama">Think (Ollama)</label>
+          <select id="bThink" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);border-radius:4px;padding:3px 6px;font-size:12px">
+            <option value="off">Dezactivat</option>
+            <option value="min">Minim (256)</option>
+            <option value="normal">Normal (1024)</option>
+            <option value="extended">Extins (4096)</option>
+            <option value="max">Maxim (∞)</option>
+          </select>
         </div>
         <div class="srow"><label title="Trimite num_gpu=0 către Ollama — forțează rularea pe CPU">Forțează CPU (Ollama)</label>
           <label class="toggle"><input type="checkbox" id="bForceCpu"><span class="slider"></span></label>
@@ -594,8 +606,14 @@ details.think-block pre{font-size:11px;color:var(--text3);white-space:pre-wrap;m
             oninput="document.getElementById('sTempVal').textContent=parseFloat(this.value).toFixed(2)">
         </div>
         <div class="frow"><label>Context Size (tokens)</label><input id="sCtx" type="number" value="8192" min="512" max="131072"></div>
-        <div class="srow" id="sThinkRow"><label>Think (Ollama)</label>
-          <label class="toggle"><input type="checkbox" id="sThink"><span class="slider"></span></label>
+        <div class="frow" id="sThinkRow"><label title="Buget tokeni pentru gândire internă Ollama">Think (Ollama)</label>
+          <select id="sThink" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);border-radius:4px;padding:3px 6px;font-size:12px">
+            <option value="off">Dezactivat</option>
+            <option value="min">Minim (256)</option>
+            <option value="normal">Normal (1024)</option>
+            <option value="extended">Extins (4096)</option>
+            <option value="max">Maxim (∞)</option>
+          </select>
         </div>
         <div class="srow"><label title="Trimite num_gpu=0 către Ollama — forțează rularea pe CPU">Forțează CPU (Ollama)</label>
           <label class="toggle"><input type="checkbox" id="sForceCpu"><span class="slider"></span></label>
@@ -970,17 +988,17 @@ const DEFAULTS = {
   aName:'Agent A', aColor:'#4a9eff', aProvider:'ollama',
   aServerUrl:'http://localhost:11434', aApiKey:'', aModel:'',
   aSystem:'Ești Agent A. Discuți cu Agent B pe tema dată de utilizator. Fii direct, analitic și constructiv.',
-  aTemp:0.7, aCtx:4096, aThink:false, aForceCpu:false, aKeepAlive:'',
+  aTemp:0.7, aCtx:4096, aThink:'off', aForceCpu:false, aKeepAlive:'',
 
   bName:'Agent B', bColor:'#a855f7', bProvider:'ollama',
   bServerUrl:'http://localhost:11434', bApiKey:'', bModel:'',
   bSystem:'Ești Agent B. Discuți cu Agent A pe tema dată de utilizator. Aduce perspective noi și pune întrebări relevante.',
-  bTemp:0.7, bCtx:4096, bThink:false, bForceCpu:false, bKeepAlive:'',
+  bTemp:0.7, bCtx:4096, bThink:'off', bForceCpu:false, bKeepAlive:'',
 
   sName:'Sinteză', sProvider:'ollama',
   sServerUrl:'http://localhost:11434', sApiKey:'', sModel:'',
   sSystem:'Ești un agent de sinteză. Generează un rezumat structurat, clar și complet al dialogului, păstrând toate informațiile importante.',
-  sTemp:0.5, sCtx:8192, sThink:false, sForceCpu:false, sKeepAlive:'',
+  sTemp:0.5, sCtx:8192, sThink:'off', sForceCpu:false, sKeepAlive:'',
   sSynthPrompt:'### Sumarizează dialogul următor într-un rezumat structurat și complet:\n\n{dialogue}\n\n### REZUMAT FINAL:',
 
   maxSteps:0, autoSumm:true, startAgent:'a', injectPrefix:'[Utilizator]:', humanInLoop:false, requestTimeout:300,
@@ -1165,9 +1183,9 @@ function readCfgFromUI() {
   cfg.aCtx = parseInt(document.getElementById('aCtx').value) || 4096;
   cfg.bCtx = parseInt(document.getElementById('bCtx').value) || 4096;
   cfg.sCtx = parseInt(document.getElementById('sCtx').value) || 8192;
-  cfg.aThink = document.getElementById('aThink').checked;
-  cfg.bThink = document.getElementById('bThink').checked;
-  cfg.sThink = document.getElementById('sThink').checked;
+  cfg.aThink = document.getElementById('aThink').value;
+  cfg.bThink = document.getElementById('bThink').value;
+  cfg.sThink = document.getElementById('sThink').value;
   cfg.aForceCpu = document.getElementById('aForceCpu').checked;
   cfg.bForceCpu = document.getElementById('bForceCpu').checked;
   cfg.sForceCpu = document.getElementById('sForceCpu').checked;
@@ -1220,7 +1238,7 @@ function applyCfgToUI() {
     document.getElementById(ag+'Temp').value = tv;
     document.getElementById(ag+'TempVal').textContent = tv.toFixed(2);
     document.getElementById(ag+'Ctx').value = cfg[ag+'Ctx'] || (ag==='s'?8192:4096);
-    document.getElementById(ag+'Think').checked = !!cfg[ag+'Think'];
+    document.getElementById(ag+'Think').value = cfg[ag+'Think'] || 'off';
     document.getElementById(ag+'ForceCpu').checked = !!cfg[ag+'ForceCpu'];
     document.getElementById(ag+'KeepAlive').value = cfg[ag+'KeepAlive'] || '';
   });
@@ -1787,7 +1805,7 @@ async function* apiStream(agKey, messages, signal) {
       'Raspunde EXCLUSIV ca ' + (cfg[agKey + 'Name'] || agKey.toUpperCase()) + ', din perspectiva ta proprie, fara sa „rupi" personajul sau sa explici mecanismul tehnic al conversatiei.',
     temperature: cfg[agKey + 'Temp'],
     contextSize: cfg[agKey + 'Ctx'],
-    thinkEnabled: cfg[agKey + 'Think'] || false,
+    thinkLevel: cfg[agKey + 'Think'] || 'off',
     forceCpu: cfg[agKey + 'ForceCpu'] || false,
     keepAlive: cfg[agKey + 'KeepAlive'] || '',
     requestTimeout: cfg.requestTimeout || 300,

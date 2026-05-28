@@ -365,7 +365,7 @@ def _stream_ollama(data):
     system  = data.get("systemPrompt", "")
     temp       = data.get("temperature", 0.7)
     ctx        = data.get("contextSize", 4096)
-    think      = data.get("thinkEnabled", False)
+    think_level = data.get("thinkLevel", "off")
     force_cpu  = data.get("forceCpu", False)
     keep_alive = data.get("keepAlive", "")
     timeout    = int(data.get("requestTimeout", 300))
@@ -383,8 +383,14 @@ def _stream_ollama(data):
         "stream": True,
         "options": options,
     }
-    if think:
+    _think_budgets = {"off": None, "min": 256, "normal": 1024, "extended": 4096, "max": None}
+    if think_level == "off":
+        payload["think"] = False
+    else:
         payload["think"] = True
+        budget = _think_budgets.get(think_level)
+        if budget is not None:
+            payload["thinking_budget"] = budget
     if keep_alive != "":
         payload["keep_alive"] = int(keep_alive) if keep_alive in ("-1", "0") else keep_alive
 
