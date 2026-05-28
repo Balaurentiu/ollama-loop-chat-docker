@@ -146,6 +146,8 @@ details.think-block summary::before{content:'▶';font-size:9px;transition:.15s}
 details.think-block[open] summary::before{content:'▼'}
 details.think-block pre{font-size:11px;color:var(--text3);white-space:pre-wrap;margin-top:6px}
 .typing-cursor::after{content:'▋';animation:blink .7s infinite;color:var(--accent)}
+.llm-status-indicator{font-size:12px;color:var(--text3);padding:2px 0 6px 0;display:flex;align-items:center;gap:6px;animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 
 /* ── INPUT ROW ── */
@@ -2104,16 +2106,26 @@ async function streamTurn(agKey, isFinal) {
   let fullContent = '', thinkContent = '', thinkEl = null;
   const _otherPats = _otherAgentPatterns(agKey);
 
+  // Status indicator (Loading / Thinking / Generating)
+  const _statusEl = document.createElement('div');
+  _statusEl.className = 'llm-status-indicator';
+  _statusEl.textContent = '⏳ Se încarcă modelul...';
+  wrap.querySelector('.msg-bubble').before(_statusEl);
+  let _firstToken = false;
+
   if (!state.abortCtrl) state.abortCtrl = new AbortController();
   try {
     for await (const chunk of apiStream(agKey, msgs, state.abortCtrl.signal)) {
       if (chunk.error) { toast('Eroare ' + agName + ': ' + chunk.error, 'err'); break; }
       if (chunk.thinking) {
+        if (!_firstToken) { _firstToken = true; _statusEl.textContent = '🤔 Gândire...'; }
         thinkContent += chunk.thinking;
         if (!thinkEl) thinkEl = ensureThinkBlock(wrap);
         updateThinkBlock(thinkEl, thinkContent);
       }
       if (chunk.content) {
+        if (!_firstToken) _firstToken = true;
+        if (_statusEl.isConnected) _statusEl.remove();
         fullContent += chunk.content;
         // Truncate if agent started writing for the other agent
         if (_otherPats.length) {
@@ -2138,6 +2150,7 @@ async function streamTurn(agKey, isFinal) {
     if (e.name === 'AbortError') { state.running = false; return; }
     toast('Stream error: ' + e.message, 'err');
   }
+  _statusEl.remove();
 
   const isDone = _detectDone(fullContent);
   const displayContent = fullContent.replace(/\s*\[STOP_DISCUSSION\]\s*/gi, '').trimEnd();
