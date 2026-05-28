@@ -2067,6 +2067,8 @@ async function runLoop() {
       if (!state.running) break;
       state.stepCount++;
       document.getElementById('step-counter').textContent = 'Pas ' + state.stepCount;
+      // Re-read agent selection dynamically — user may have switched agent during pause
+      cur = cfg.oneAgentKey || 'a';
       continue;
     }
 
