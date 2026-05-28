@@ -363,10 +363,11 @@ def _stream_ollama(data):
     model   = data.get("model", "")
     msgs    = list(data.get("messages", []))
     system  = data.get("systemPrompt", "")
-    temp      = data.get("temperature", 0.7)
-    ctx       = data.get("contextSize", 4096)
-    think     = data.get("thinkEnabled", False)
-    force_cpu = data.get("forceCpu", False)
+    temp       = data.get("temperature", 0.7)
+    ctx        = data.get("contextSize", 4096)
+    think      = data.get("thinkEnabled", False)
+    force_cpu  = data.get("forceCpu", False)
+    keep_alive = data.get("keepAlive", "")
 
     if system:
         msgs = [{"role": "system", "content": system}] + msgs
@@ -383,6 +384,8 @@ def _stream_ollama(data):
     }
     if think:
         payload["think"] = True
+    if keep_alive != "":
+        payload["keep_alive"] = int(keep_alive) if keep_alive in ("-1", "0") else keep_alive
 
     try:
         with requests.post(
