@@ -400,11 +400,19 @@ def chat():
     return Response(generators[provider](data), content_type="application/x-ndjson")
 
 
+def _inject_date(system: str) -> str:
+    """Append current date/time to system prompt so LLM knows the current year."""
+    import datetime as _dt
+    now = _dt.datetime.now()
+    date_line = f"\n\nData și ora curentă: {now.strftime('%A, %d %B %Y, %H:%M')} (fus orar local)."
+    return (system + date_line) if system else date_line.strip()
+
+
 def _stream_ollama(data):
     server  = data.get("serverUrl", "http://192.168.0.17:11434").rstrip("/")
     model   = data.get("model", "")
     msgs    = list(data.get("messages", []))
-    system  = data.get("systemPrompt", "")
+    system  = _inject_date(data.get("systemPrompt", ""))
     temp       = data.get("temperature", 0.7)
     ctx        = data.get("contextSize", 4096)
     think_level = data.get("thinkLevel", "off")
@@ -492,7 +500,7 @@ def _stream_openai(data):
     api_key    = data.get("apiKey", "")
     model      = data.get("model", "gpt-4o")
     msgs       = list(data.get("messages", []))
-    system     = data.get("systemPrompt", "")
+    system     = _inject_date(data.get("systemPrompt", ""))
     temp       = data.get("temperature", 0.7)
     max_tokens = data.get("contextSize", 4096)
     timeout    = int(data.get("requestTimeout", 300))
@@ -546,7 +554,7 @@ def _stream_gemini(data):
     api_key    = data.get("apiKey", "")
     model      = data.get("model", "gemini-2.0-flash")
     msgs       = list(data.get("messages", []))
-    system     = data.get("systemPrompt", "")
+    system     = _inject_date(data.get("systemPrompt", ""))
     temp       = data.get("temperature", 0.7)
     timeout    = int(data.get("requestTimeout", 300))
     max_tokens = data.get("contextSize", 4096)
@@ -614,7 +622,7 @@ def _stream_anthropic(data):
     api_key    = data.get("apiKey", "")
     model      = data.get("model", "claude-sonnet-4-6")
     msgs       = list(data.get("messages", []))
-    system     = data.get("systemPrompt", "")
+    system     = _inject_date(data.get("systemPrompt", ""))
     temp       = data.get("temperature", 0.7)
     timeout    = int(data.get("requestTimeout", 300))
     max_tokens = data.get("contextSize", 4096)
