@@ -914,26 +914,29 @@ def _youtube_fetch(url, max_size=30000):
     try:
         import glob as _glob
         sub_cmd = [
-            'yt-dlp', '--write-auto-subs', '--sub-langs', 'ro,en',
+            'yt-dlp', '--write-auto-subs', '--sub-langs', 'ro,en,-live_chat',
             '--skip-download', '--convert-subs', 'srt',
             '--output', f'/tmp/_ws_yt_{video_id}',
+            '--add-headers', 'User-Agent:Mozilla/5.0',
             url,
         ]
-        _sp.run(sub_cmd, capture_output=True, text=True, timeout=30)
-        sub_files = _glob.glob(f'/tmp/_ws_yt_{video_id}.*.srt') + \
-                    _glob.glob(f'/tmp/_ws_yt_{video_id}.*.vtt')
-        if sub_files:
-            sub_lines = []
-            for sf in sorted(sub_files):
-                with open(sf, 'r', errors='replace') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and '-->' not in line and not line.isdigit():
-                            sub_lines.append(line)
-                os.remove(sf)
-            if sub_lines:
-                content_parts.append(f"Transcript ({len(sub_lines)} lines):")
-                content_parts.append('\n'.join(sub_lines)[:20000])
+        sub_result = _sp.run(sub_cmd, capture_output=True, text=True, timeout=45)
+        # 429 = rate limited — skip subtitles silently
+        if '429' not in sub_result.stderr:
+            sub_files = _glob.glob(f'/tmp/_ws_yt_{video_id}.*.srt') + \
+                        _glob.glob(f'/tmp/_ws_yt_{video_id}.*.vtt')
+            if sub_files:
+                sub_lines = []
+                for sf in sorted(sub_files):
+                    with open(sf, 'r', errors='replace') as f:
+                        for line in f:
+                            line = line.strip()
+                            if line and '-->' not in line and not line.isdigit():
+                                sub_lines.append(line)
+                    os.remove(sf)
+                if sub_lines:
+                    content_parts.append(f"Transcript ({len(sub_lines)} lines):")
+                    content_parts.append('\n'.join(sub_lines)[:20000])
     except Exception:
         pass
 
@@ -1306,11 +1309,15 @@ def _run_single_query_pipeline(query, reason, original_query, config, chunk, _to
                 except Exception:
                     summary = ''
                 if len(summary) < 50:
-                    yield chunk(log=f'  Summary too short ({len(summary)} chars), skipping')
-                    if live_stats is not None:
-                        live_stats['sources_skip'] += 1
-                        yield chunk(stats=dict(live_stats))
-                    continue
+                    # For YouTube: use title + content snippet as minimal summary rather than skip
+                    if fetch_method == 'youtube' and content.strip():
+                        summary = content.strip()[:500]
+                    else:
+                        yield chunk(log=f'  Summary too short ({len(summary)} chars), skipping')
+                        if live_stats is not None:
+                            live_stats['sources_skip'] += 1
+                            yield chunk(stats=dict(live_stats))
+                        continue
                 summaries.append({'summary': summary, 'title': title, 'url': url, 'content_size': len(content)})
                 if live_stats is not None:
                     live_stats['sources_ok'] += 1
@@ -1378,11 +1385,14 @@ def _run_single_query_pipeline(query, reason, original_query, config, chunk, _to
                 yield chunk(log=f'  Summary failed ({e})')
 
             if len(summary) < 50:
-                yield chunk(log=f'  Summary too short ({len(summary)} chars), skipping')
-                if live_stats is not None:
-                    live_stats['sources_skip'] += 1
-                    yield chunk(stats=dict(live_stats))
-                continue
+                if ctype == 'youtube' and content.strip():
+                    summary = content.strip()[:500]
+                else:
+                    yield chunk(log=f'  Summary too short ({len(summary)} chars), skipping')
+                    if live_stats is not None:
+                        live_stats['sources_skip'] += 1
+                        yield chunk(stats=dict(live_stats))
+                    continue
 
             yield chunk(log=f'  Summary: {title} ({len(summary)} chars)')
             _cache_store(hashlib.sha256(query.lower().strip().encode()).hexdigest(), query, reason, url, title, summary, content, len(content), success=1)
