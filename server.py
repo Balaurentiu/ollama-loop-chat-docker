@@ -1350,23 +1350,34 @@ def _run_single_query_pipeline(query, reason, original_query, config, chunk, _to
                 except Exception as e:
                     yield chunk(log=f'  Overview failed ({e})')
 
-            # Relevance
-            rel_prompt = (
-                rel_prompt_tpl
-                .replace('{reason}', reason)
-                .replace('{query}', query)
-                .replace('{title}', title)
-                .replace('{url}', url)
-                .replace('{content}', overview_text)
-            )
-            try:
-                rel_resp = _call_llm_simple(provider, model, rel_prompt,
-                                            api_key=api_key, server_url=server_url, temp=0.1, ctx=ctx_size).strip()
-                is_relevant = rel_resp.upper().startswith('YES')
-                yield chunk(log=f'  Relevance: {"YES" if is_relevant else "NO"} — {title}')
-            except Exception as e:
-                yield chunk(log=f'  Relevance check failed ({e}), accepting')
+            # Relevance — fast keyword pre-check before LLM call
+            # If enough query keywords appear in title+url, accept immediately
+            _STOPWORDS = {'the','and','for','are','was','how','use','using','with','from',
+                          'manual','utilizare','montare','instalare','review','youtube','despre'}
+            _q_words = [w for w in _re.split(r'\W+', query.lower()) if len(w) > 2 and w not in _STOPWORDS]
+            _haystack = (title + ' ' + url).lower()
+            _kw_hits = sum(1 for w in _q_words if w in _haystack)
+            _kw_ratio = _kw_hits / max(len(_q_words), 1)
+            if _kw_ratio >= 0.3:
                 is_relevant = True
+                yield chunk(log=f'  Relevance: YES (keyword match {_kw_hits}/{len(_q_words)}) — {title}')
+            else:
+                rel_prompt = (
+                    rel_prompt_tpl
+                    .replace('{reason}', reason)
+                    .replace('{query}', query)
+                    .replace('{title}', title)
+                    .replace('{url}', url)
+                    .replace('{content}', overview_text)
+                )
+                try:
+                    rel_resp = _call_llm_simple(provider, model, rel_prompt,
+                                                api_key=api_key, server_url=server_url, temp=0.1, ctx=ctx_size).strip()
+                    is_relevant = rel_resp.upper().startswith('YES')
+                    yield chunk(log=f'  Relevance: {"YES" if is_relevant else "NO"} — {title}')
+                except Exception as e:
+                    yield chunk(log=f'  Relevance check failed ({e}), accepting')
+                    is_relevant = True
 
             if not is_relevant:
                 if live_stats is not None:
