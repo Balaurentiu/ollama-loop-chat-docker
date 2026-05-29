@@ -177,6 +177,10 @@ def index():
 
 # ─── Debug upload page (temporary) ───────────────────────────────────────────
 _debug_uploads = []  # list of {id, filename, comment, time, kind}
+_debug_downloads = {}  # name -> (bytes, mime)
+
+def _register_debug_download(name, data, mime='application/octet-stream'):
+    _debug_downloads[name] = (data, mime)
 
 @app.route("/debug")
 def debug_page():
@@ -192,13 +196,21 @@ def debug_page():
           <div style="color:#fff;font-size:14px;margin-bottom:12px;white-space:pre-wrap">{u['comment'] or '<em style=color:#555>fără comentariu</em>'}</div>
           {content_html}
         </div>"""
+    dl_html = ""
+    for name in _debug_downloads:
+        import urllib.parse
+        enc = urllib.parse.quote(name)
+        dl_html += f'<a href="/debug/download/{enc}" style="display:inline-flex;align-items:center;gap:8px;background:#1e1e2e;border:1px solid #4a9eff;color:#4a9eff;padding:10px 18px;border-radius:6px;text-decoration:none;font-size:14px;margin:4px">⬇ {name}</a>'
+
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
     <title>Debug Upload</title>
     <style>body{{background:#111;color:#eee;font-family:sans-serif;max-width:900px;margin:40px auto;padding:0 20px}}
     input,textarea{{background:#1e1e2e;border:1px solid #444;color:#fff;border-radius:6px;padding:8px;width:100%;box-sizing:border-box;margin-top:6px}}
     button{{background:#4a9eff;color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:14px;margin-top:10px}}
-    h2{{color:#4a9eff}}</style></head><body>
-    <h2>🐛 Debug Upload</h2>
+    h2{{color:#4a9eff}} h3{{color:#aaa}}</style></head><body>
+    <h2>🐛 Debug — Transfer Fișiere</h2>
+    {'<div><h3>⬇ Descărcare fișiere de pe server</h3>' + dl_html + '<hr style="border-color:#333;margin:30px 0"></div>' if dl_html else ''}
+    <h3>⬆ Upload fișiere către server</h3>
     <form method="POST" action="/debug/upload" enctype="multipart/form-data">
       <label>Fișier (PNG/JPG/TXT/LOG):<br><input type="file" name="file" required></label><br><br>
       <label>Comentariu / descriere eroare:<br><textarea name="comment" rows="4" placeholder="Descrie ce vezi sau ce s-a întâmplat..."></textarea></label><br>
@@ -243,6 +255,30 @@ def debug_img(uid):
             r.headers["Content-Type"] = "image/png"
             return r
     return "not found", 404
+
+@app.route("/debug/download/<name>")
+def debug_download(name):
+    import urllib.parse
+    decoded = urllib.parse.unquote(name)
+    if decoded not in _debug_downloads:
+        return "not found", 404
+    data, mime = _debug_downloads[decoded]
+    from flask import make_response
+    r = make_response(data)
+    r.headers["Content-Type"] = mime
+    r.headers["Content-Disposition"] = f'attachment; filename="{decoded}"'
+    return r
+
+def _load_debug_downloads():
+    """Pre-load files available for download on the debug page."""
+    import zipfile, io
+    # websearch module archive
+    arc_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'websearch-module.zip')
+    if os.path.exists(arc_path):
+        with open(arc_path, 'rb') as f:
+            _register_debug_download('websearch-module.zip', f.read(), 'application/zip')
+
+_load_debug_downloads()
 
 
 # ── MODELE ───────────────────────────────────────────────────────────────────
