@@ -879,7 +879,7 @@ def _youtube_fetch(url, max_size=30000):
         'yt-dlp',
         '--print', '%(title)s|||%(uploader)s|||%(description)s|||%(webpage_url)s',
         '--skip-download',
-        '--http-header', 'User-Agent:Mozilla/5.0',
+        '--add-headers', 'User-Agent:Mozilla/5.0',
         url,
     ]
     result = _sp.run(cmd, capture_output=True, text=True, timeout=60)
