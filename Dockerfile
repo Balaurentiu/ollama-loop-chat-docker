@@ -9,12 +9,12 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     pkg-config \
     libcairo2-dev \
-    yt-dlp \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file and install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir yt-dlp
 
 # Install Playwright + Chromium (optional: for JS-heavy page fallback)
 RUN pip install --no-cache-dir playwright && \

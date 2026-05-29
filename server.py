@@ -883,12 +883,10 @@ def _youtube_fetch(url, max_size=30000):
         url,
     ]
     result = _sp.run(cmd, capture_output=True, text=True, timeout=60)
-    if result.returncode != 0:
-        raise RuntimeError(f"yt-dlp failed: {result.stderr[:500]}")
-
     stdout = result.stdout.strip()
+    # yt-dlp exits non-zero for warnings (nsig, formats) but still outputs data
     if not stdout:
-        raise RuntimeError("yt-dlp returned empty output")
+        raise RuntimeError(f"yt-dlp failed: {result.stderr[:500]}")
 
     # Parse metadata line
     lines = stdout.split('\n')
