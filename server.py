@@ -13,6 +13,7 @@ import sqlite3
 import time
 import threading
 import uuid as _uuid
+import hashlib
 # sys.path.insert(0, '/home') (Commented out for Docker)
 
 _sessions = {}        # {session_id: {last_seen, is_controller, label}}
@@ -219,7 +220,12 @@ def debug_page():
     <hr style="border-color:#333;margin:30px 0">
     <h3>Uploads ({len(_debug_uploads)})</h3>
     {items_html or '<p style="color:#555">Niciun upload încă.</p>'}
-    <script>setTimeout(()=>location.reload(), 15000)</script>
+    <script>
+    let _reloadTimer = setTimeout(()=>location.reload(), 300000);
+    document.querySelector('form').addEventListener('submit', () => {{
+      clearTimeout(_reloadTimer);
+    }});
+    </script>
     </body></html>"""
 
 @app.route("/debug/upload", methods=["POST"])
@@ -842,9 +848,177 @@ def _search_ddg(query, max_results=5, region='wt-wt'):
     return results
 
 
+# ── YOUTUBE FETCH (yt-dlp) ────────────────────────────────────────────────
+_RE_YOUTUBE = re.compile(
+    r'(?:https?://)?(?:www\.|m\.)?'
+    r'(?:youtube\.com/(?:watch\?v=|embed/|v/|shorts/|live/)'
+    r'|youtu\.be/)'
+    r'([a-zA-Z0-9_-]{11})'
+)
+
+def _is_youtube_url(url):
+    """Check if a URL is a YouTube video page."""
+    return bool(_RE_YOUTUBE.search(url))
+
+
+def _youtube_fetch(url, max_size=30000):
+    """Fetch YouTube video info + transcript via yt-dlp.
+    Returns (text, 'youtube') or raises on failure.
+    The text includes: title, uploader, description, and auto-generated subtitles.
+    """
+    import subprocess as _sp
+
+    # Extract video ID
+    m = _RE_YOUTUBE.search(url)
+    if not m:
+        raise ValueError(f"Could not extract YouTube video ID from: {url}")
+    video_id = m.group(1)
+
+    # Fetch video metadata via --print (no --dump-json to avoid conflict)
+    cmd = [
+        'yt-dlp',
+        '--print', '%(title)s|||%(uploader)s|||%(description)s|||%(webpage_url)s',
+        '--skip-download',
+        '--http-header', 'User-Agent:Mozilla/5.0',
+        url,
+    ]
+    result = _sp.run(cmd, capture_output=True, text=True, timeout=60)
+    if result.returncode != 0:
+        raise RuntimeError(f"yt-dlp failed: {result.stderr[:500]}")
+
+    stdout = result.stdout.strip()
+    if not stdout:
+        raise RuntimeError("yt-dlp returned empty output")
+
+    # Parse metadata line
+    lines = stdout.split('\n')
+    meta_line = lines[0]
+    parts = meta_line.split('|||')
+    title = parts[0] if len(parts) > 0 else ''
+    uploader = parts[1] if len(parts) > 1 else ''
+    description = parts[2] if len(parts) > 2 else ''
+    webpage_url = parts[3] if len(parts) > 3 else url
+
+    # Build content
+    content_parts = [
+        "=== YOUTUBE VIDEO ===",
+        f"Title: {title}",
+        f"Uploader: {uploader}",
+        f"URL: {webpage_url}",
+        "",
+    ]
+    if description:
+        desc = description[:5000]
+        content_parts.append(f"Description:\n{desc}")
+        content_parts.append("")
+
+    # Extract subtitles via yt-dlp (download to tmp, parse back)
+    try:
+        import glob as _glob
+        sub_cmd = [
+            'yt-dlp', '--write-auto-subs', '--sub-langs', 'ro,en',
+            '--skip-download', '--convert-subs', 'srt',
+            '--output', f'/tmp/_ws_yt_{video_id}',
+            url,
+        ]
+        _sp.run(sub_cmd, capture_output=True, text=True, timeout=30)
+        sub_files = _glob.glob(f'/tmp/_ws_yt_{video_id}.*.srt') + \
+                    _glob.glob(f'/tmp/_ws_yt_{video_id}.*.vtt')
+        if sub_files:
+            sub_lines = []
+            for sf in sorted(sub_files):
+                with open(sf, 'r', errors='replace') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and '-->' not in line and not line.isdigit():
+                            sub_lines.append(line)
+                os.remove(sf)
+            if sub_lines:
+                content_parts.append(f"Transcript ({len(sub_lines)} lines):")
+                content_parts.append('\n'.join(sub_lines)[:20000])
+    except Exception:
+        pass
+
+    full_text = '\n'.join(content_parts)
+    return full_text[:max_size], 'youtube'
+
+
+# ── BROWSER FETCH (Playwright headless) ───────────────────────────────────
+def _browser_fetch(url, max_size=30000, timeout_sec=20):
+    """Fetch a page using Playwright headless Chromium.
+    Returns (text, 'browser') or raises on failure.
+    Optional dependency — requires: pip install playwright && python -m playwright install chromium
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        raise RuntimeError("Playwright not installed. Run: pip install playwright && python -m playwright install chromium")
+
+    text = ''
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            headless=True,
+            args=[
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-setuid-sandbox',
+            ],
+        )
+        context = browser.new_context(
+            user_agent=(
+                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
+                '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            ),
+            locale='ro-RO',
+        )
+        page = context.new_page()
+        try:
+            page.goto(url, wait_until='domcontentloaded', timeout=timeout_sec * 1000)
+            page.wait_for_timeout(2000)
+            try:
+                page.wait_for_selector('body', timeout=5000)
+            except Exception:
+                pass
+            text = page.evaluate('''() => {
+                for (const el of document.querySelectorAll('script, style, nav, footer, header, aside, svg, [role="navigation"]')) {
+                    el.remove();
+                }
+                return document.body ? document.body.innerText : '';
+            }''') or ''
+        except Exception as e:
+            raise RuntimeError(f"Playwright navigation failed: {e}")
+        finally:
+            browser.close()
+
+    if not text.strip():
+        raise RuntimeError("Playwright returned empty content")
+
+    lines = [l.strip() for l in text.split('\n') if l.strip()]
+    text = '\n'.join(lines)
+    return text[:max_size], 'browser'
+
+
 def _fetch_page_content(url, max_size=30000):
-    """Fetch URL and extract text. Returns (text, content_type_str)."""
+    """Fetch URL and extract text. Returns (text, content_type_str).
+
+    Routing logic:
+      - YouTube (youtube.com, youtu.be)  → _youtube_fetch() via yt-dlp
+      - All other URLs:
+          1. HTTP fetch (trafilatura → BS4 → regex)
+          2. If content too short (<500 chars or JS placeholder) → Playwright headless
+    """
     import re as _re
+
+    # ── YouTube route ──
+    if _is_youtube_url(url):
+        try:
+            text, _ = _youtube_fetch(url, max_size=max_size)
+            return text, 'youtube'
+        except Exception as e:
+            raise RuntimeError(f"YouTube fetch failed: {e}")
+
+    # ── Standard HTTP fetch ──
     headers = {
         'User-Agent': ('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
                        '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
@@ -852,6 +1026,9 @@ def _fetch_page_content(url, max_size=30000):
     resp = requests.get(url, headers=headers, timeout=30, allow_redirects=True)
     resp.raise_for_status()
     content_type = resp.headers.get('Content-Type', '').lower()
+
+    text = ''
+    method = 'unknown'
 
     if 'text/html' in content_type or not content_type:
         # Try trafilatura first
@@ -861,35 +1038,64 @@ def _fetch_page_content(url, max_size=30000):
             _tcfg = use_config()
             text = trafilatura.extract(resp.text, include_links=False, include_tables=True, config=_tcfg)
             if text and len(text.strip()) > 100:
-                return text[:max_size], 'html'
+                method = 'trafilatura'
         except Exception:
             pass
 
-        # Fallback: BeautifulSoup
-        try:
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            for el in soup.find_all(['script', 'style', 'nav', 'footer', 'header', 'aside']):
-                el.decompose()
-            text = soup.get_text(separator='\n', strip=True)
-            text = _re.sub(r'\n{3,}', '\n\n', text)
-            if text.strip():
-                return text[:max_size], 'html'
-        except ImportError:
-            pass
+        if not text or len(text.strip()) <= 100:
+            # Fallback: BeautifulSoup
+            try:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                for el in soup.find_all(['script', 'style', 'nav', 'footer', 'header', 'aside']):
+                    el.decompose()
+                text = soup.get_text(separator='\n', strip=True)
+                text = _re.sub(r'\n{3,}', '\n\n', text)
+                if text.strip():
+                    method = 'bs4'
+            except ImportError:
+                pass
 
-        # Last resort: regex strip
+        if not text or len(text.strip()) <= 100:
+            # Last resort: regex strip
+            text = _re.sub(r'<[^>]+>', '', resp.text)
+            text = _re.sub(r'\s+', ' ', text).strip()
+            method = 'regex'
+
+        if text:
+            text = text[:max_size]
+
+    elif 'text/plain' in content_type:
+        text = resp.text[:max_size]
+        method = 'text'
+
+    else:
         text = _re.sub(r'<[^>]+>', '', resp.text)
         text = _re.sub(r'\s+', ' ', text).strip()
-        return text[:max_size], 'html'
+        text = text[:max_size]
+        method = 'unknown'
 
-    if 'text/plain' in content_type:
-        return resp.text[:max_size], 'text'
+    text = text or ''
 
-    # Generic fallback
-    text = _re.sub(r'<[^>]+>', '', resp.text)
-    text = _re.sub(r'\s+', ' ', text).strip()
-    return text[:max_size], 'unknown'
+    # ── Detect if content is too short (JS skeleton) ──
+    stripped = text.strip()
+    is_skeleton = (
+        len(stripped) < 500
+        or 'enable javascript' in stripped.lower()
+        or 'enable js' in stripped.lower()
+        or 'loading' in stripped.lower()[:50]
+    )
+
+    if is_skeleton:
+        # Fallback to Playwright headless (optional dependency)
+        try:
+            browser_text, _ = _browser_fetch(url, max_size=max_size)
+            return browser_text, 'browser'
+        except Exception:
+            # If Playwright also fails, return whatever we had from HTTP
+            return text, f'{method}_skeleton'
+
+    return text, method
 
 
 _DEFAULT_WS_OPT_PROMPT = (
@@ -1181,7 +1387,7 @@ def _run_single_query_pipeline(query, reason, original_query, config, chunk, _to
                 continue
 
             yield chunk(log=f'  Summary: {title} ({len(summary)} chars)')
-            _cache_store(query.lower().strip(), query, reason, url, title, summary, content, len(content), success=1)
+            _cache_store(hashlib.sha256(query.lower().strip().encode()).hexdigest(), query, reason, url, title, summary, content, len(content), success=1)
             summaries.append({'summary': summary, 'title': title, 'url': url, 'content_size': len(content)})
             if live_stats is not None:
                 live_stats['sources_ok'] += 1
