@@ -1078,22 +1078,22 @@ def _fetch_page_content(url, max_size=30000):
 
     text = text or ''
 
-    # ── Detect if content is too short (JS skeleton) ──
+    # ── Detect JS skeleton (explicit markers only, NOT by length) ──
+    # Using length alone triggers Playwright on legitimate pages with short content,
+    # causing 30+ second delays and cookie-consent walls.
     stripped = text.strip()
-    is_skeleton = (
-        len(stripped) < 500
-        or 'enable javascript' in stripped.lower()
+    js_markers = (
+        'enable javascript' in stripped.lower()
         or 'enable js' in stripped.lower()
-        or 'loading' in stripped.lower()[:50]
+        or stripped.lower()[:80].count('loading') > 0 and len(stripped) < 120
     )
 
-    if is_skeleton:
+    if js_markers:
         # Fallback to Playwright headless (optional dependency)
         try:
             browser_text, _ = _browser_fetch(url, max_size=max_size)
             return browser_text, 'browser'
         except Exception:
-            # If Playwright also fails, return whatever we had from HTTP
             return text, f'{method}_skeleton'
 
     return text, method
