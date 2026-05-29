@@ -920,7 +920,7 @@ def _youtube_fetch(url, max_size=30000):
             '--add-headers', 'User-Agent:Mozilla/5.0',
             url,
         ]
-        sub_result = _sp.run(sub_cmd, capture_output=True, text=True, timeout=45)
+        sub_result = _sp.run(sub_cmd, capture_output=True, text=True, timeout=20)
         # 429 = rate limited — skip subtitles silently
         if '429' not in sub_result.stderr:
             sub_files = _glob.glob(f'/tmp/_ws_yt_{video_id}.*.srt') + \
@@ -1135,10 +1135,10 @@ _DEFAULT_WS_REL_PROMPT = (
     "PAGE URL: {url}\n"
     "PAGE CONTENT (sample):\n{content}\n\n"
     "Answer YES or NO.\n"
-    "- Answer YES if this source TYPE is likely to contain the needed information "
-    "(e.g. official docs, release pages, changelogs, official blogs, GitHub repos) "
-    "— even if the specific version/detail isn't visible in this sample.\n"
-    "- Answer NO only if the source is clearly unrelated (wrong project, wrong topic, forum noise, ads).\n"
+    "- Answer YES if the page title, URL or content mentions the topic, product, person or event from the search query "
+    "— this includes reviews, comparisons, tutorials, news articles, product pages, YouTube videos, forum posts.\n"
+    "- Answer NO ONLY if the page is clearly about a completely different topic, product or person.\n"
+    "Be generous: when in doubt, answer YES.\n"
     "One line: YES or NO followed by a brief reason."
 )
 
@@ -1279,12 +1279,19 @@ def _run_single_query_pipeline(query, reason, original_query, config, chunk, _to
 
     # Fetch + relevance + summarize
     summaries = []
+    _SKIP_DOMAINS = ('instagram.com', 'facebook.com', 'twitter.com', 'x.com', 'tiktok.com', 'linkedin.com')
+
     for idx in ranked_indices:
         if len(summaries) >= max_store_results:
             break
         r = results[idx]
         url   = r['url']
         title = r['title']
+
+        # Skip login-walled social media — always inaccessible
+        if any(d in url for d in _SKIP_DOMAINS):
+            yield chunk(log=f'  Skip (social media): {url}')
+            continue
 
         # Cache check
         if cache_ttl > 0:
