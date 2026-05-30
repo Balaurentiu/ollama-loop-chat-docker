@@ -1934,7 +1934,8 @@ def _audio_synth(params):
             cutoff = float(fx.get('cutoff', 2000))
             nyq = SR / 2.0
             if 0 < cutoff < nyq:
-                b, a = butter(4, cutoff / nyq, btype=ft[:4])
+                btype = 'low' if ft == 'lowpass' else 'high'
+                b, a = butter(4, cutoff / nyq, btype=btype)
                 mix = filtfilt(b, a, mix)
         elif ft == 'reverb':
             wet = float(fx.get('wet', 0.3))
@@ -1970,6 +1971,8 @@ def audio_generate():
         wav_bytes = _audio_synth(params)
         return Response(wav_bytes, mimetype='audio/wav')
     except Exception as e:
+        import traceback as _tb
+        print(f'[audio] ERROR: {e}\nparams={params}\n{_tb.format_exc()}', flush=True)
         return jsonify({'error': str(e)}), 400
 
 
