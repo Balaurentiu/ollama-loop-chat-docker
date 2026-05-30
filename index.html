@@ -1640,12 +1640,40 @@ async function _generateAudio(params, wrapEl, autoplay = true) {
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
+
+    const container = document.createElement('div');
+    container.style.cssText = 'margin-top:8px';
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:6px';
+
     const audioEl = document.createElement('audio');
     audioEl.src = url;
     audioEl.controls = true;
     audioEl.autoplay = autoplay;
-    audioEl.style.cssText = 'width:100%;height:36px;margin-top:8px;display:block;border-radius:var(--radius)';
-    indicator.replaceWith(audioEl);
+    audioEl.style.cssText = 'flex:1;height:36px;border-radius:var(--radius)';
+
+    const codeBtn = document.createElement('button');
+    codeBtn.title = 'Arată codul JSON al melodiei';
+    codeBtn.textContent = '{ }';
+    codeBtn.style.cssText = 'flex-shrink:0;font-size:11px;font-family:monospace;padding:3px 7px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg3);color:var(--text3);cursor:pointer;line-height:1';
+
+    const codeBlock = document.createElement('pre');
+    codeBlock.textContent = JSON.stringify(params, null, 2);
+    codeBlock.style.cssText = 'display:none;margin:6px 0 0;padding:8px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);font-size:11px;overflow-x:auto;white-space:pre';
+
+    codeBtn.onclick = () => {
+      const open = codeBlock.style.display === 'none';
+      codeBlock.style.display = open ? 'block' : 'none';
+      codeBtn.style.color = open ? 'var(--accent)' : 'var(--text3)';
+      codeBtn.style.borderColor = open ? 'var(--accent)' : 'var(--border2)';
+    };
+
+    row.appendChild(audioEl);
+    row.appendChild(codeBtn);
+    container.appendChild(row);
+    container.appendChild(codeBlock);
+    indicator.replaceWith(container);
   } catch(e) {
     indicator.innerHTML = '⚠ Audio eșuat: ' + e.message;
     indicator.style.color = 'var(--red)';
