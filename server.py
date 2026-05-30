@@ -1126,14 +1126,16 @@ def _fetch_page_content(url, max_size=30000):
 
     text = text or ''
 
-    # ── Detect JS skeleton (explicit markers only, NOT by length) ──
-    # Using length alone triggers Playwright on legitimate pages with short content,
-    # causing 30+ second delays and cookie-consent walls.
+    # ── Detect JS skeleton → try Playwright ──
+    # Trigger on explicit JS markers OR if content is suspiciously short (<400 chars).
+    # Very short content after trafilatura+BS4 almost always means a JS-rendered app shell.
+    # Exception: YouTube/social URLs are handled before reaching here.
     stripped = text.strip()
     js_markers = (
-        'enable javascript' in stripped.lower()
+        len(stripped) < 400
+        or 'enable javascript' in stripped.lower()
         or 'enable js' in stripped.lower()
-        or stripped.lower()[:80].count('loading') > 0 and len(stripped) < 120
+        or (stripped.lower()[:80].count('loading') > 0 and len(stripped) < 120)
     )
 
     if js_markers:
