@@ -1040,33 +1040,73 @@ def _fetch_page_content(url, max_size=30000):
     method = 'unknown'
 
     if 'text/html' in content_type or not content_type:
-        # Try trafilatura first
+        from bs4 import BeautifulSoup
+
+        # ── Pass 1: trafilatura (precision mode off = extract more) ──
+        _JUNK_PATTERNS = _re.compile(
+            r'(confidențialitate|privacy policy|cookie policy|gdpr|'
+            r'navigate forward to interact|navigate backward|keyboard shortcuts|'
+            r'press the question mark|prelucrare.*date personale)',
+            _re.I
+        )
         try:
             import trafilatura
             from trafilatura.settings import use_config
             _tcfg = use_config()
-            text = trafilatura.extract(resp.text, include_links=False, include_tables=True, config=_tcfg)
-            if text and len(text.strip()) > 100:
-                method = 'trafilatura'
+            _tcfg.set('DEFAULT', 'MIN_EXTRACTED_SIZE', '50')
+            _tcfg.set('DEFAULT', 'MIN_DUPLCHECK_SIZE', '100')
+            _traf = trafilatura.extract(
+                resp.text,
+                include_links=False,
+                include_tables=True,
+                include_comments=False,
+                favor_precision=False,
+                config=_tcfg,
+            )
+            if _traf and len(_traf.strip()) > 100:
+                # Reject if content looks like privacy policy or UI navigation noise
+                _sample = _traf[:300].lower()
+                if not _JUNK_PATTERNS.search(_sample):
+                    text = _traf
+                    method = 'trafilatura'
         except Exception:
             pass
 
+        # ── Pass 2: BeautifulSoup targeted on semantic content areas ──
         if not text or len(text.strip()) <= 100:
-            # Fallback: BeautifulSoup
             try:
-                from bs4 import BeautifulSoup
                 soup = BeautifulSoup(resp.text, 'html.parser')
-                for el in soup.find_all(['script', 'style', 'nav', 'footer', 'header', 'aside']):
+                # Remove noise elements
+                for el in soup.find_all(['script', 'style', 'nav', 'footer',
+                                         'header', 'aside', 'form', 'noscript',
+                                         'iframe', 'svg', 'button']):
                     el.decompose()
-                text = soup.get_text(separator='\n', strip=True)
+                # Remove cookie/privacy policy sections by common class/id names
+                for el in soup.find_all(True, {'id': _re.compile(r'cookie|gdpr|consent|privacy|modal|popup', _re.I)}):
+                    el.decompose()
+                for el in soup.find_all(True, {'class': _re.compile(r'cookie|gdpr|consent|privacy|modal|popup|overlay', _re.I)}):
+                    el.decompose()
+                # Prefer semantic content areas
+                main = (soup.find('main') or soup.find('article') or
+                        soup.find(attrs={'role': 'main'}) or
+                        soup.find('div', {'id': _re.compile(r'content|main|body', _re.I)}) or
+                        soup.find('div', {'class': _re.compile(r'content|main|body|post|entry', _re.I)}) or
+                        soup.body or soup)
+                # Extract headings + paragraphs + list items for structure
+                parts = []
+                for tag in main.find_all(['h1','h2','h3','h4','p','li','td','th','span'], limit=300):
+                    t = tag.get_text(separator=' ', strip=True)
+                    if len(t) > 20:
+                        parts.append(t)
+                text = '\n'.join(parts)
                 text = _re.sub(r'\n{3,}', '\n\n', text)
-                if text.strip():
+                if len(text.strip()) > 100:
                     method = 'bs4'
-            except ImportError:
+            except Exception:
                 pass
 
+        # ── Pass 3: last resort regex strip ──
         if not text or len(text.strip()) <= 100:
-            # Last resort: regex strip
             text = _re.sub(r'<[^>]+>', '', resp.text)
             text = _re.sub(r'\s+', ' ', text).strip()
             method = 'regex'
@@ -1161,17 +1201,19 @@ _DEFAULT_WS_OVERVIEW_PROMPT = (
 )
 
 _DEFAULT_WS_SUMM_PROMPT = (
-    "You are summarizing a web page for a user. Today's date is {date}.\n\n"
-    "REASON the user needs this information: {reason}\n"
+    "You are extracting useful information from a web page. Today's date is {date}.\n\n"
+    "RESEARCH GOAL: {reason}\n"
     "SEARCH QUERY: {query}\n"
     "SOURCE: {source_title} ({source_url})\n\n"
     "PAGE CONTENT:\n{content}\n\n"
     "Instructions:\n"
-    "1. Summarize only what is relevant to the REASON — include as much detail as needed, but omit irrelevant content.\n"
-    "2. Preserve specific details: versions, dates, numbers, commands, code snippets, names.\n"
-    "3. If the content is outdated relative to today ({date}), mention it explicitly.\n"
-    "4. Respond in the same language as the REASON.\n"
-    "5. Start directly with the information found — no meta-commentary."
+    "1. Extract and summarize ALL useful information present in the page content above.\n"
+    "2. Prioritize information relevant to the RESEARCH GOAL, but include other notable facts too.\n"
+    "3. Preserve specific details: names, prices, dates, URLs, phone numbers, addresses, ratings, specs.\n"
+    "4. If the content is clearly outdated relative to today ({date}), mention it.\n"
+    "5. Respond in the same language as the RESEARCH GOAL.\n"
+    "6. Start directly with the extracted information — no meta-commentary.\n"
+    "7. IMPORTANT: Always write at least 2-3 sentences. If the page has ANY useful content, summarize it."
 )
 
 _DEFAULT_WS_ADAPTIVE_PROMPT = (
