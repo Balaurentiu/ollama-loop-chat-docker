@@ -6,3 +6,5 @@ beautifulsoup4
 markdown
 xhtml2pdf
 python-docx
+numpy
+scipy

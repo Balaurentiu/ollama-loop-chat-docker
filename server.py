@@ -1861,6 +1861,118 @@ def websearch_status_list():
     return jsonify({'tasks': tasks})
 
 
+# ── AUDIO SYNTHESIS ────────────────────────────────────────────────────────────
+
+def _audio_note_freq(note_str):
+    """Convert note name (A4, C#3, Bb5) to frequency in Hz."""
+    import re as _re
+    _SEMIS = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}
+    m = _re.match(r'^([A-G])([#b]?)(\d)$', note_str.strip())
+    if not m:
+        raise ValueError(f'Invalid note: {note_str!r}')
+    name, acc, octave = m.groups()
+    semitone = _SEMIS[name] + (1 if acc == '#' else -1 if acc == 'b' else 0)
+    midi = (int(octave) + 1) * 12 + semitone
+    return 440.0 * (2.0 ** ((midi - 69) / 12.0))
+
+
+def _audio_synth(params):
+    """Synthesize audio from JSON params dict. Returns WAV bytes."""
+    import numpy as _np
+    from scipy.io import wavfile as _wf
+    import io as _io
+
+    SR = 44100
+    duration = min(float(params.get('duration', 4.0)), 30.0)
+    n_total = int(SR * duration)
+    mix = _np.zeros(n_total, dtype=_np.float64)
+
+    for layer in params.get('layers', []):
+        wave_type = layer.get('wave', 'sine')
+        note = layer.get('note')
+        freq = _audio_note_freq(note) if note else float(layer.get('freq', 440.0))
+        t0 = max(0.0, float(layer.get('start', 0.0)))
+        t1 = min(float(layer.get('end', duration)), duration)
+        amp = float(layer.get('amplitude', 0.5))
+        s0, s1 = int(t0 * SR), min(int(t1 * SR), n_total)
+        n = s1 - s0
+        if n <= 0:
+            continue
+        t = _np.linspace(0, n / SR, n, endpoint=False)
+        if wave_type == 'square':
+            w = _np.sign(_np.sin(2 * _np.pi * freq * t))
+        elif wave_type == 'sawtooth':
+            w = 2 * (t * freq - _np.floor(t * freq + 0.5))
+        elif wave_type == 'triangle':
+            w = 2 * _np.abs(2 * (t * freq - _np.floor(t * freq + 0.5))) - 1
+        elif wave_type == 'noise':
+            w = _np.random.uniform(-1, 1, n)
+        else:
+            w = _np.sin(2 * _np.pi * freq * t)
+        adsr = layer.get('adsr')
+        if adsr and len(adsr) == 4:
+            atk, dec, sus, rel = [float(x) for x in adsr]
+            a = min(int(atk * SR), n)
+            d = min(int(dec * SR), max(0, n - a))
+            r = min(int(rel * SR), max(0, n - a - d))
+            s = max(0, n - a - d - r)
+            env = _np.concatenate([
+                _np.linspace(0, 1, a) if a else _np.array([]),
+                _np.linspace(1, sus, d) if d else _np.array([]),
+                _np.full(s, sus),
+                _np.linspace(sus, 0, r) if r else _np.array([]),
+            ])[:n]
+            if len(env) < n:
+                env = _np.pad(env, (0, n - len(env)))
+            w = w * env
+        mix[s0:s1] += w * amp
+
+    for fx in params.get('effects', []):
+        ft = fx.get('type', '')
+        if ft in ('lowpass', 'highpass'):
+            from scipy.signal import butter, filtfilt
+            cutoff = float(fx.get('cutoff', 2000))
+            nyq = SR / 2.0
+            if 0 < cutoff < nyq:
+                b, a = butter(4, cutoff / nyq, btype=ft[:4])
+                mix = filtfilt(b, a, mix)
+        elif ft == 'reverb':
+            wet = float(fx.get('wet', 0.3))
+            d1, d2 = int(0.03 * SR), int(0.07 * SR)
+            out = mix.copy()
+            if n_total > d1:
+                out[d1:] += mix[:-d1] * wet * 0.6
+            if n_total > d2:
+                out[d2:] += mix[:-d2] * wet * 0.3
+            mix = out
+        elif ft == 'echo':
+            ds = int(float(fx.get('delay', 0.3)) * SR)
+            dec_v = float(fx.get('decay', 0.5))
+            if 0 < ds < n_total:
+                out = mix.copy()
+                out[ds:] += mix[:-ds] * dec_v
+                mix = out
+
+    peak = _np.max(_np.abs(mix))
+    if peak > 0:
+        mix = mix / peak * 0.9
+    pcm = (mix * 32767).astype(_np.int16)
+    buf = _io.BytesIO()
+    _wf.write(buf, SR, pcm)
+    return buf.getvalue()
+
+
+@app.route('/api/audio/generate', methods=['POST'])
+def audio_generate():
+    data = request.get_json() or {}
+    params = data.get('params', data)
+    try:
+        wav_bytes = _audio_synth(params)
+        return Response(wav_bytes, mimetype='audio/wav')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
 @app.route('/export_chat', methods=['POST'])
 def export_chat():
     """Export selected chat messages as PDF or DOCX."""
