@@ -1830,10 +1830,26 @@ def websearch_stream(task_id):
     return Response(generate(), content_type='application/x-ndjson')
 
 
+@app.route('/api/websearch/task/<task_id>', methods=['DELETE'])
+def websearch_task_delete(task_id):
+    """Cancel and remove a websearch task completely."""
+    with _ws_tasks_lock:
+        task = _ws_tasks.pop(task_id, None)
+    if task:
+        task['status'] = 'error'
+        task['event'].set()  # unblock any waiting stream
+    return jsonify({'ok': True})
+
+
 @app.route('/api/websearch/status', methods=['GET'])
 def websearch_status_list():
     """Returns list of active/recent web search tasks."""
+    now = time.time()
     with _ws_tasks_lock:
+        # Mark stale running tasks as error (no heartbeat for >5 min = abandoned)
+        for t in _ws_tasks.values():
+            if t['status'] == 'running' and now - t.get('started_at', now) > 300:
+                t['status'] = 'error'
         tasks = [{
             'task_id': tid,
             'status': t['status'],
