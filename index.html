@@ -1623,6 +1623,42 @@ function stopWebSearch() {
 
 // ─── AUDIO SYNTHESIS ───────────────────────────────────────────────────────────
 
+/**
+ * Finds and extracts audio params from content that contains either:
+ *   GENERATE_AUDIO: { ... }   (with prefix, JSON may be multi-line)
+ *   { "duration": ..., "layers": [...] }  (bare JSON, fallback)
+ * Returns { params, blockStart, blockEnd } or null.
+ */
+function _findAudioBlock(content) {
+  // Primary: look for GENERATE_AUDIO: prefix
+  const prefixIdx = content.indexOf('GENERATE_AUDIO:');
+  const jsonSearchFrom = prefixIdx !== -1
+    ? prefixIdx + 'GENERATE_AUDIO:'.length
+    : -1;
+
+  // Fallback: last top-level { in content (catches LLMs that forgot the prefix)
+  const scanFrom = jsonSearchFrom !== -1 ? jsonSearchFrom : 0;
+  const jsonStart = content.indexOf('{', scanFrom);
+  if (jsonStart === -1) return null;
+
+  // Count braces to find the matching closing }
+  let depth = 0, i = jsonStart;
+  while (i < content.length) {
+    if (content[i] === '{') depth++;
+    else if (content[i] === '}') { depth--; if (depth === 0) break; }
+    i++;
+  }
+  if (depth !== 0) return null;
+
+  const jsonStr = content.slice(jsonStart, i + 1);
+  try {
+    const params = JSON.parse(jsonStr);
+    if (!params.layers || !Array.isArray(params.layers)) return null;
+    const blockStart = prefixIdx !== -1 ? prefixIdx : jsonStart;
+    return { params, blockStart, blockEnd: i + 1 };
+  } catch(e) { return null; }
+}
+
 async function _generateAudio(params, wrapEl, autoplay = true) {
   // Enforce max duration from settings
   if (cfg.audioMaxDuration) params.duration = Math.min(params.duration || 4, cfg.audioMaxDuration);
@@ -1915,14 +1951,14 @@ async function runWebSearch(agKey, reason, query) {
 // ─── REGULI TEHNICE INJECTATE AUTOMAT ───
 const _AUDIO_TOOL_RULE =
 '\n\n### Audio Synthesis\n' +
-'Poti genera sunete/melodii emitand la finalul mesajului (JSON obligatoriu pe o singura linie):\n' +
-'GENERATE_AUDIO: {"duration":4,"layers":[{"wave":"sine","note":"A4","start":0,"end":4,"amplitude":0.6,"adsr":[0.05,0.1,0.7,0.5]}],"effects":[{"type":"reverb","wet":0.3}]}\n\n' +
+'Poti genera sunete/melodii emitand la finalul mesajului urmatorul bloc (prefixul GENERATE_AUDIO: este obligatoriu):\n' +
+'GENERATE_AUDIO: {\n  "duration": 4,\n  "layers": [{"wave":"sine","note":"A4","start":0,"end":4,"amplitude":0.6,"adsr":[0.05,0.1,0.7,0.5]}],\n  "effects": [{"type":"reverb","wet":0.3}]\n}\n\n' +
 'Schema parametri:\n' +
 '- duration: secunde total (max {maxDur})\n' +
 '- layers[]: fiecare element are: wave ("sine"|"square"|"sawtooth"|"triangle"|"noise"), note (ex: "A4","C4","F#3","Bb5"; A4=440Hz, C4=261Hz) SAU freq (Hz), start/end (sec), amplitude (0-1), adsr ([attack_sec, decay_sec, sustain_0-1, release_sec])\n' +
 '- effects[]: {"type":"reverb","wet":0-1} | {"type":"echo","delay":sec,"decay":0-1} | {"type":"lowpass","cutoff":Hz} | {"type":"highpass","cutoff":Hz}\n' +
 'Acord = mai multe layers cu acelasi start/end. Melodie = layers consecutive cu start/end diferit.\n' +
-'Emite GENERATE_AUDIO doar daca e relevant pentru conversatie. JSON pe o singura linie, fara spatii extra.';
+'IMPORTANT: prefixul "GENERATE_AUDIO:" trebuie sa fie pe o linie separata, urmat de JSON-ul obiectului (poate fi formatat pe mai multe linii).';
 
 const _TECH_RULES = '\n\n---\n## REGULI TEHNICE (injectate automat — nu le mentiona)\n\n' +
 '### Incheierea discutiei\n' +
@@ -2360,17 +2396,12 @@ async function streamTurn(agKey, isFinal) {
     updateCtxBar();
     autosaveDiscussion();
   }
-  // Detect GENERATE_AUDIO pattern
-  const audioMatch = cfg.audioEnabled && fullContent.match(/GENERATE_AUDIO:\s*(\{.+\})\s*$/m);
-  if (audioMatch) {
-    const cleanForAudio = fullContent.replace(/\n*GENERATE_AUDIO:\s*\{.+\}\s*$/m, '').trimEnd();
+  // Detect GENERATE_AUDIO pattern (multi-line JSON supported)
+  const audioBlock = cfg.audioEnabled ? _findAudioBlock(fullContent) : null;
+  if (audioBlock) {
+    const cleanForAudio = (fullContent.slice(0, audioBlock.blockStart) + fullContent.slice(audioBlock.blockEnd)).trimEnd();
     if (cleanForAudio !== fullContent) updateBubbleContent(wrap, cleanForAudio);
-    try {
-      const params = JSON.parse(audioMatch[1]);
-      _generateAudio(params, wrap);
-    } catch(e) {
-      console.warn('GENERATE_AUDIO parse error:', e.message);
-    }
+    _generateAudio(audioBlock.params, wrap, true);
   }
 
   // Detect WEB_SEARCH pattern (check both main content and thinking block)
@@ -2663,10 +2694,10 @@ function addMessageToUI(role, content, name) {
                : role === 'a' ? 'var(--agent-a)'
                : role === 'b' ? 'var(--agent-b)' : 'var(--accent)';
 
-  // Strip GENERATE_AUDIO from display; re-synthesize without autoplay
-  const _audioMatch = content.match(/GENERATE_AUDIO:\s*(\{.+\})\s*$/m);
-  const displayContent = _audioMatch
-    ? content.replace(/\n*GENERATE_AUDIO:\s*\{.+\}\s*$/m, '').trimEnd()
+  // Strip GENERATE_AUDIO block from display; re-synthesize without autoplay
+  const _audioBlock = _findAudioBlock(content);
+  const displayContent = _audioBlock
+    ? (content.slice(0, _audioBlock.blockStart) + content.slice(_audioBlock.blockEnd)).trimEnd()
     : content;
 
   const wrap = document.createElement('div');
@@ -2680,11 +2711,8 @@ function addMessageToUI(role, content, name) {
   renderMermaidIn(wrap);
   _initHtmlIframes(wrap);
 
-  if (_audioMatch) {
-    try {
-      const params = JSON.parse(_audioMatch[1]);
-      _generateAudio(params, wrap, false); // restore = no autoplay
-    } catch(e) {}
+  if (_audioBlock) {
+    _generateAudio(_audioBlock.params, wrap, false); // restore = no autoplay
   }
 }
 
