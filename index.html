@@ -1623,7 +1623,7 @@ function stopWebSearch() {
 
 // ─── AUDIO SYNTHESIS ───────────────────────────────────────────────────────────
 
-async function _generateAudio(params, wrapEl) {
+async function _generateAudio(params, wrapEl, autoplay = true) {
   // Enforce max duration from settings
   if (cfg.audioMaxDuration) params.duration = Math.min(params.duration || 4, cfg.audioMaxDuration);
   const indicator = document.createElement('div');
@@ -1643,7 +1643,7 @@ async function _generateAudio(params, wrapEl) {
     const audioEl = document.createElement('audio');
     audioEl.src = url;
     audioEl.controls = true;
-    audioEl.autoplay = true;
+    audioEl.autoplay = autoplay;
     audioEl.style.cssText = 'width:100%;height:36px;margin-top:8px;display:block;border-radius:var(--radius)';
     indicator.replaceWith(audioEl);
   } catch(e) {
@@ -2634,16 +2634,30 @@ function addMessageToUI(role, content, name) {
   const color = role === 'user' ? 'var(--accent)'
                : role === 'a' ? 'var(--agent-a)'
                : role === 'b' ? 'var(--agent-b)' : 'var(--accent)';
+
+  // Strip GENERATE_AUDIO from display; re-synthesize without autoplay
+  const _audioMatch = content.match(/GENERATE_AUDIO:\s*(\{.+\})\s*$/m);
+  const displayContent = _audioMatch
+    ? content.replace(/\n*GENERATE_AUDIO:\s*\{.+\}\s*$/m, '').trimEnd()
+    : content;
+
   const wrap = document.createElement('div');
   wrap.className = 'msg ' + cls;
   wrap.innerHTML = `<div class="msg-header"><span class="msg-name" style="color:${color}">${escHtml(name)}</span><span class="msg-time">${_now()}</span></div>
-<div class="msg-bubble md-content">${renderMd(content)}</div>`;
+<div class="msg-bubble md-content">${renderMd(displayContent)}</div>`;
   wrap.dataset.rawText = content;
   wrap.setAttribute('data-raw-text', content);
   wrap.addEventListener('contextmenu', e => { e.preventDefault(); showCtxMenu(e, wrap); });
   appendMsg(wrap);
   renderMermaidIn(wrap);
   _initHtmlIframes(wrap);
+
+  if (_audioMatch) {
+    try {
+      const params = JSON.parse(_audioMatch[1]);
+      _generateAudio(params, wrap, false); // restore = no autoplay
+    } catch(e) {}
+  }
 }
 
 function createStreamingBubble(agKey, agName, step) {
