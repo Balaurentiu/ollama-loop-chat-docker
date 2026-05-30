@@ -863,20 +863,22 @@ details.think-block pre{font-size:11px;color:var(--text3);white-space:pre-wrap;m
           Când e activat, agenții primesc în system prompt definiția tool-ului audio.<br>
           Agentul emite <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">GENERATE_AUDIO: {...JSON...}</code> în răspuns,<br>
           iar interfața generează și redă automat sunetul sintetizat.<br><br>
-          <b style="color:var(--text2)">Parametrii JSON (toate pe o singură linie):</b><br>
-          • <b>duration</b>: secunde (max <span id="audioMaxDurDisplay">10</span>)<br>
-          • <b>layers[]</b>: straturi sonore — wave, note/freq, start, end, amplitude, adsr<br>
-          • <b>effects[]</b>: reverb, echo, lowpass, highpass<br><br>
-          <b style="color:var(--text2)">Note:</b> A4=440Hz, C4=261Hz, octave 0–8. Sharps: F#4, flats: Bb3.<br>
-          Wave types: <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">sine</code> <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">square</code> <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">sawtooth</code> <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">triangle</code> <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">noise</code>
+          <b style="color:var(--text2)">Timbre-uri instrumentale (additive synthesis):</b><br>
+          <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">piano</code> <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">bell</code> <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">organ</code> <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">strings</code> <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">flute</code> <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">brass</code><br>
+          Oscilatoare: <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">sine</code> <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">square</code> <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">sawtooth</code> <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">triangle</code> <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">noise</code><br><br>
+          <b style="color:var(--text2)">Notație BPM (recomandată):</b><br>
+          <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">"bpm": 120, "beat": 0, "beats": 2</code> — beat și durata în bătăi<br>
+          Sau clasic: <code style="background:var(--bg4);padding:1px 4px;border-radius:3px">"start": 0, "end": 1.5</code> — secunde<br><br>
+          <b style="color:var(--text2)">Note:</b> A4=440Hz, C4=261Hz. Octave 0–8. Sharps: F#4, flats: Bb3.<br>
+          Max durată: <span id="audioMaxDurDisplay">10</span>s
         </div>
 
         <div style="margin-top:14px">
           <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Test rapid:</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="fetch-btn" onclick="audioTestPlay('chord')">▶ Acord Am</button>
-            <button class="fetch-btn" onclick="audioTestPlay('melody')">▶ Melodie</button>
-            <button class="fetch-btn" onclick="audioTestPlay('bass')">▶ Bass sine</button>
+            <button class="fetch-btn" onclick="audioTestPlay('chord')">▶ Strings Am</button>
+            <button class="fetch-btn" onclick="audioTestPlay('melody')">▶ Piano + Organ</button>
+            <button class="fetch-btn" onclick="audioTestPlay('bass')">▶ Bell + Flute</button>
           </div>
           <div id="audio-test-player" style="margin-top:10px;display:none">
             <audio id="audio-test-el" controls style="width:100%;height:36px"></audio>
@@ -1717,22 +1719,24 @@ async function _generateAudio(params, wrapEl, autoplay = true) {
 }
 
 const _AUDIO_TEST_PRESETS = {
-  chord: {"duration":3,"layers":[
-    {"wave":"sine","note":"A3","start":0,"end":3,"amplitude":0.5,"adsr":[0.05,0.1,0.8,0.6]},
-    {"wave":"sine","note":"C4","start":0,"end":3,"amplitude":0.45,"adsr":[0.05,0.1,0.8,0.6]},
-    {"wave":"sine","note":"E4","start":0,"end":3,"amplitude":0.45,"adsr":[0.05,0.1,0.8,0.6]}
-  ],"effects":[{"type":"reverb","wet":0.35}]},
-  melody: {"duration":4,"layers":[
-    {"wave":"sine","note":"C4","start":0,"end":0.4,"amplitude":0.6,"adsr":[0.02,0.05,0.8,0.1]},
-    {"wave":"sine","note":"E4","start":0.4,"end":0.8,"amplitude":0.6,"adsr":[0.02,0.05,0.8,0.1]},
-    {"wave":"sine","note":"G4","start":0.8,"end":1.2,"amplitude":0.6,"adsr":[0.02,0.05,0.8,0.1]},
-    {"wave":"sine","note":"C5","start":1.2,"end":2.0,"amplitude":0.6,"adsr":[0.02,0.05,0.9,0.3]}
-  ],"effects":[{"type":"reverb","wet":0.25}]},
-  bass: {"duration":3,"layers":[
-    {"wave":"sine","note":"A1","start":0,"end":0.8,"amplitude":0.7,"adsr":[0.01,0.1,0.6,0.2]},
-    {"wave":"sine","note":"A1","start":1.0,"end":1.8,"amplitude":0.7,"adsr":[0.01,0.1,0.6,0.2]},
-    {"wave":"sine","note":"E2","start":2.0,"end":3.0,"amplitude":0.7,"adsr":[0.01,0.1,0.6,0.3]}
-  ],"effects":[{"type":"lowpass","cutoff":300}]}
+  chord: {"bpm":80,"layers":[
+    {"wave":"strings","note":"A3","beat":0,"beats":4,"amplitude":0.5,"adsr":[0.3,0.2,0.8,0.6]},
+    {"wave":"strings","note":"C4","beat":0,"beats":4,"amplitude":0.45,"adsr":[0.3,0.2,0.8,0.6]},
+    {"wave":"strings","note":"E4","beat":0,"beats":4,"amplitude":0.45,"adsr":[0.3,0.2,0.8,0.6]}
+  ],"effects":[{"type":"reverb","wet":0.45}]},
+  melody: {"bpm":120,"layers":[
+    {"wave":"piano","note":"C4","beat":0,"beats":1,"amplitude":0.7,"adsr":[0.01,0.3,0.5,0.3]},
+    {"wave":"piano","note":"E4","beat":1,"beats":1,"amplitude":0.7,"adsr":[0.01,0.3,0.5,0.3]},
+    {"wave":"piano","note":"G4","beat":2,"beats":1,"amplitude":0.7,"adsr":[0.01,0.3,0.5,0.3]},
+    {"wave":"piano","note":"C5","beat":3,"beats":2,"amplitude":0.7,"adsr":[0.01,0.3,0.6,0.5]},
+    {"wave":"organ","note":"C3","beat":0,"beats":4,"amplitude":0.25,"adsr":[0.01,0.01,0.9,0.1]}
+  ],"effects":[{"type":"reverb","wet":0.3},{"type":"echo","delay":0.25,"decay":0.2}]},
+  bass: {"bpm":100,"layers":[
+    {"wave":"bell","note":"A4","beat":0,"beats":2,"amplitude":0.7,"adsr":[0.01,0.01,0.0,1.8]},
+    {"wave":"bell","note":"C5","beat":2,"beats":2,"amplitude":0.6,"adsr":[0.01,0.01,0.0,1.8]},
+    {"wave":"bell","note":"E5","beat":4,"beats":3,"amplitude":0.65,"adsr":[0.01,0.01,0.0,2.0]},
+    {"wave":"flute","note":"A3","beat":0,"beats":7,"amplitude":0.3,"adsr":[0.2,0.1,0.7,0.4]}
+  ],"effects":[{"type":"reverb","wet":0.5}]}
 };
 
 async function audioTestPlay(preset) {
@@ -1951,14 +1955,32 @@ async function runWebSearch(agKey, reason, query) {
 // ─── REGULI TEHNICE INJECTATE AUTOMAT ───
 const _AUDIO_TOOL_RULE =
 '\n\n### Audio Synthesis\n' +
-'Poti genera sunete/melodii emitand la finalul mesajului urmatorul bloc (prefixul GENERATE_AUDIO: este obligatoriu):\n' +
-'GENERATE_AUDIO: {\n  "duration": 4,\n  "layers": [{"wave":"sine","note":"A4","start":0,"end":4,"amplitude":0.6,"adsr":[0.05,0.1,0.7,0.5]}],\n  "effects": [{"type":"reverb","wet":0.3}]\n}\n\n' +
+'Poti genera sunete/melodii emitand la finalul mesajului urmatorul bloc (prefixul GENERATE_AUDIO: este obligatoriu):\n\n' +
+'GENERATE_AUDIO: {\n' +
+'  "bpm": 120,\n' +
+'  "layers": [\n' +
+'    {"wave": "piano", "note": "C4", "beat": 0, "beats": 2, "amplitude": 0.7, "adsr": [0.01, 0.3, 0.5, 0.4]},\n' +
+'    {"wave": "strings", "note": "E4", "beat": 0, "beats": 4, "amplitude": 0.4, "adsr": [0.3, 0.2, 0.8, 0.5]}\n' +
+'  ],\n' +
+'  "effects": [{"type": "reverb", "wet": 0.4}]\n' +
+'}\n\n' +
 'Schema parametri:\n' +
-'- duration: secunde total (max {maxDur})\n' +
-'- layers[]: fiecare element are: wave ("sine"|"square"|"sawtooth"|"triangle"|"noise"), note (ex: "A4","C4","F#3","Bb5"; A4=440Hz, C4=261Hz) SAU freq (Hz), start/end (sec), amplitude (0-1), adsr ([attack_sec, decay_sec, sustain_0-1, release_sec])\n' +
-'- effects[]: {"type":"reverb","wet":0-1} | {"type":"echo","delay":sec,"decay":0-1} | {"type":"lowpass","cutoff":Hz} | {"type":"highpass","cutoff":Hz}\n' +
-'Acord = mai multe layers cu acelasi start/end. Melodie = layers consecutive cu start/end diferit.\n' +
-'IMPORTANT: prefixul "GENERATE_AUDIO:" trebuie sa fie pe o linie separata, urmat de JSON-ul obiectului (poate fi formatat pe mai multe linii).';
+'- bpm: tempo (beats per minute) — foloseste impreuna cu "beat"/"beats" in loc de "start"/"end" in secunde\n' +
+'- duration: secunde total (max {maxDur}) — calculat automat din beats daca nu e specificat\n' +
+'- layers[]: fiecare element are:\n' +
+'  - wave: timbru instrumental — "piano" | "bell" | "organ" | "strings" | "flute" | "brass"\n' +
+'           sau oscilator simplu — "sine" | "square" | "sawtooth" | "triangle" | "noise"\n' +
+'  - note: "C4","A4","F#3","Bb5" (A4=440Hz, C4=261Hz) SAU freq: valoare Hz\n' +
+'  - beat/beats: pozitie si durata in beats (preferat cu bpm) SAU start/end: secunde\n' +
+'  - amplitude: 0.0–1.0\n' +
+'  - adsr: [attack_sec, decay_sec, sustain_0-1, release_sec]\n' +
+'- effects[]: {"type":"reverb","wet":0-1} | {"type":"echo","delay":sec,"decay":0-1} | {"type":"lowpass","cutoff":Hz} | {"type":"highpass","cutoff":Hz}\n\n' +
+'Sfaturi compozitie:\n' +
+'- Acord: mai multe layers cu acelasi beat/beats\n' +
+'- Melodie: layers consecutive cu beat crescator\n' +
+'- Piano: adsr scurt decay (0.01, 0.3, 0.5, 0.3). Strings: attack lung (0.3, 0.2, 0.8, 0.5)\n' +
+'- Bell: fara sustain (0.01, 0.01, 0.0, 1.5). Organ: sustain lung (0.01, 0.01, 0.9, 0.1)\n' +
+'IMPORTANT: prefixul "GENERATE_AUDIO:" pe linie separata, urmat de JSON (poate fi formatat pe mai multe linii).';
 
 const _TECH_RULES = '\n\n---\n## REGULI TEHNICE (injectate automat — nu le mentiona)\n\n' +
 '### Incheierea discutiei\n' +

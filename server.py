@@ -1876,6 +1876,47 @@ def _audio_note_freq(note_str):
     return 440.0 * (2.0 ** ((midi - 69) / 12.0))
 
 
+# ── Additive synthesis timbre presets ─────────────────────────────────────────
+# Each entry: list of (frequency_ratio, relative_amplitude) pairs
+_TIMBRE_HARMONICS = {
+    'piano':   [(1, 1.00), (2, 0.50), (3, 0.25), (4, 0.12), (5, 0.06), (6, 0.03)],
+    'bell':    [(1, 1.00), (2.76, 0.67), (5.40, 0.35), (8.93, 0.12)],          # inharmonic
+    'organ':   [(1, 1.00), (2, 0.80), (3, 0.80), (4, 0.60), (5, 0.40),
+                (6, 0.30), (7, 0.20), (8, 0.10)],                               # Hammond-style
+    'strings': [(1, 1.00), (2, 0.50), (3, 0.30), (4, 0.20), (5, 0.15),
+                (6, 0.10), (7, 0.08)],                                           # + vibrato
+    'flute':   [(1, 1.00), (2, 0.40), (3, 0.08)],                              # near-pure
+    'brass':   [(1, 0.50), (2, 1.00), (3, 0.80), (4, 0.50), (5, 0.30), (6, 0.20)],
+}
+
+
+def _gen_timbre(wave_type, freq, n, sr, _np):
+    """Generate one timbre sample using additive synthesis."""
+    t = _np.linspace(0, n / sr, n, endpoint=False)
+    harmonics = _TIMBRE_HARMONICS[wave_type]
+    w = _np.zeros(n)
+
+    if wave_type == 'piano':
+        # Higher harmonics decay much faster → characteristic piano brightness-to-warmth arc
+        for idx, (ratio, amp) in enumerate(harmonics):
+            decay = _np.exp(-(idx + 1) * 3.0 * t / max(n / sr, 0.01))
+            w += amp * _np.sin(2 * _np.pi * freq * ratio * t) * decay
+
+    elif wave_type == 'strings':
+        # Vibrato: slow LFO (5.5 Hz, ±0.3% pitch) on all harmonics simultaneously
+        vib = 1.0 + 0.003 * _np.sin(2 * _np.pi * 5.5 * t)
+        phase = _np.cumsum(2 * _np.pi * freq * vib / sr)
+        for ratio, amp in harmonics:
+            w += amp * _np.sin(phase * ratio)
+
+    else:
+        for ratio, amp in harmonics:
+            w += amp * _np.sin(2 * _np.pi * freq * ratio * t)
+
+    peak = _np.max(_np.abs(w))
+    return w / peak if peak > 0 else w
+
+
 def _audio_synth(params):
     """Synthesize audio from JSON params dict. Returns WAV bytes."""
     import numpy as _np
@@ -1883,6 +1924,20 @@ def _audio_synth(params):
     import io as _io
 
     SR = 44100
+
+    # ── BPM → seconds preprocessing ───────────────────────────────────────────
+    bpm = float(params.get('bpm', 0))
+    if bpm > 0:
+        beat_s = 60.0 / bpm
+        for layer in params.get('layers', []):
+            if 'beat' in layer and 'start' not in layer:
+                layer['start'] = float(layer['beat']) * beat_s
+            if 'beats' in layer and 'end' not in layer:
+                layer['end'] = layer.get('start', 0.0) + float(layer['beats']) * beat_s
+        if not params.get('duration'):
+            max_end = max((l.get('end', 0) for l in params.get('layers', [])), default=4.0)
+            params['duration'] = max_end + beat_s   # one beat of silence at end
+
     duration = min(float(params.get('duration', 4.0)), 30.0)
     n_total = int(SR * duration)
     mix = _np.zeros(n_total, dtype=_np.float64)
@@ -1899,7 +1954,9 @@ def _audio_synth(params):
         if n <= 0:
             continue
         t = _np.linspace(0, n / SR, n, endpoint=False)
-        if wave_type == 'square':
+        if wave_type in _TIMBRE_HARMONICS:
+            w = _gen_timbre(wave_type, freq, n, SR, _np)
+        elif wave_type == 'square':
             w = _np.sign(_np.sin(2 * _np.pi * freq * t))
         elif wave_type == 'sawtooth':
             w = 2 * (t * freq - _np.floor(t * freq + 0.5))
