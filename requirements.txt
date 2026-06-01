@@ -8,3 +8,5 @@ xhtml2pdf
 python-docx
 numpy
 scipy
+pyfluidsynth
+midiutil

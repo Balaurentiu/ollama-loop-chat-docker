@@ -11,7 +11,16 @@ RUN apt-get update && apt-get install -y \
     libcairo2-dev \
     ffmpeg \
     nodejs \
+    fluidsynth \
+    libfluidsynth-dev \
+    wget \
     && rm -rf /var/lib/apt/lists/*
+
+# Download GeneralUser GS SoundFont (~30MB, high quality GM instruments)
+RUN mkdir -p /usr/share/sounds/sf2 && \
+    wget -q -O /usr/share/sounds/sf2/GeneralUser_GS.sf2 \
+    "https://raw.githubusercontent.com/mrbumpy409/GeneralUser-GS/main/GeneralUser-GS.sf2" && \
+    echo "SoundFont downloaded OK: $(stat -c%s /usr/share/sounds/sf2/GeneralUser_GS.sf2) bytes"
 
 # Copy the requirements file and install dependencies
 COPY requirements.txt .

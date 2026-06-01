@@ -293,6 +293,17 @@ details.think-block pre{font-size:11px;color:var(--text3);white-space:pre-wrap;m
 .ws-step.done .ws-step-icon{border-color:#22c55e;background:rgba(34,197,94,.15);color:#22c55e}
 .ws-step.skipped .ws-step-icon{opacity:.4}
 @keyframes ws-spin{to{transform:rotate(360deg)}}
+@keyframes eq-bounce{0%,100%{transform:scaleY(.15)}50%{transform:scaleY(1)}}
+.audio-eq{display:inline-flex;align-items:flex-end;gap:2px;height:16px;vertical-align:middle}
+.audio-eq span{display:inline-block;width:3px;height:14px;border-radius:2px;background:var(--accent);transform-origin:bottom;animation:eq-bounce .7s ease-in-out infinite}
+.audio-eq span:nth-child(1){animation-delay:0s}
+.audio-eq span:nth-child(2){animation-delay:.1s}
+.audio-eq span:nth-child(3){animation-delay:.2s}
+.audio-eq span:nth-child(4){animation-delay:.3s}
+.audio-eq span:nth-child(5){animation-delay:.15s}
+.audio-eq span:nth-child(6){animation-delay:.05s}
+.audio-eq.compose span{background:var(--agent-a)}
+.audio-eq.paused span{animation-play-state:paused;transform:scaleY(.15)}
 #ws-query-display{padding:8px 18px;font-size:11px;color:var(--text2);background:var(--bg3);border-bottom:1px solid var(--border)}
 #ws-log-wrap{display:flex;flex-direction:column;flex:1;min-height:0}
 #ws-log-toolbar{padding:4px 18px;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border);background:var(--bg3)}
@@ -858,6 +869,17 @@ details.think-block pre{font-size:11px;color:var(--text3);white-space:pre-wrap;m
           <label title="Durata maximă permisă per sunet generat">Durată maximă (sec)</label>
           <input id="audioMaxDuration" type="number" value="10" min="1" max="30" style="width:80px">
         </div>
+        <div class="frow" style="margin-top:8px">
+          <label title="Model rapid folosit de server pentru planificarea COMPOSE_AUDIO. Gol = același model ca agentul activ.">Model Compozitie</label>
+          <div class="model-row">
+            <select id="bgComposeModel"><option value="">(same as agent)</option></select>
+            <button class="fetch-btn" onclick="fetchModels('bgCompose')">⟳ Fetch</button>
+          </div>
+          <div class="manual-model-row">
+            <input id="bgComposeManualModel" placeholder="sau scrie manual...">
+            <button class="fetch-btn" onclick="setManualModel('bgCompose')">Set</button>
+          </div>
+        </div>
         <div style="margin-top:12px;padding:10px 12px;background:var(--bg3);border-radius:var(--radius);font-size:12px;color:var(--text3);line-height:1.6">
           <b style="color:var(--text2)">Cum funcționează:</b><br>
           Când e activat, agenții primesc în system prompt definiția tool-ului audio.<br>
@@ -1262,6 +1284,7 @@ function readCfgFromUI() {
 
   cfg.audioEnabled = document.getElementById('audioEnabled').checked;
   cfg.audioMaxDuration = parseInt(document.getElementById('audioMaxDuration').value) || 10;
+  cfg.bgComposeModel = document.getElementById('bgComposeModel').value.trim();
 
 }
 
@@ -1330,6 +1353,12 @@ function applyCfgToUI() {
   }
   document.getElementById('audioEnabled').checked = cfg.audioEnabled === true;
   document.getElementById('audioMaxDuration').value = cfg.audioMaxDuration || 10;
+  if (cfg.bgComposeModel) {
+    const bcSel = document.getElementById('bgComposeModel');
+    let opt = Array.from(bcSel.options).find(o => o.value === cfg.bgComposeModel);
+    if (!opt) { opt = new Option(cfg.bgComposeModel, cfg.bgComposeModel); bcSel.add(opt); }
+    bcSel.value = cfg.bgComposeModel;
+  }
 }
 
 function applyColors() {
@@ -1522,9 +1551,16 @@ function _populateAnthropicModels(ag) {
 
 async function fetchModels(ag) {
   readCfgFromUI();
-  const prov = ag === 'ws' ? cfg.wsProvider : cfg[ag + 'Provider'];
-  const serverUrl = ag === 'ws' ? cfg.wsServerUrl : cfg[ag + 'ServerUrl'];
-  const apiKey = ag === 'ws' ? cfg.wsApiKey : cfg[ag + 'ApiKey'];
+  // bgCompose borrows provider/server from agent 'a'
+  const prov      = ag === 'ws' ? cfg.wsProvider
+                  : ag === 'bgCompose' ? (cfg.aProvider || 'ollama')
+                  : cfg[ag + 'Provider'];
+  const serverUrl = ag === 'ws' ? cfg.wsServerUrl
+                  : ag === 'bgCompose' ? (cfg.aServerUrl || 'http://localhost:11434')
+                  : cfg[ag + 'ServerUrl'];
+  const apiKey    = ag === 'ws' ? cfg.wsApiKey
+                  : ag === 'bgCompose' ? (cfg.aApiKey || '')
+                  : cfg[ag + 'ApiKey'];
   if (prov === 'anthropic') {
     const sel = document.getElementById(ag + 'Model');
     const cur = sel.value;
@@ -1634,39 +1670,159 @@ function stopWebSearch() {
 function _findAudioBlock(content) {
   // Primary: look for GENERATE_AUDIO: prefix
   const prefixIdx = content.indexOf('GENERATE_AUDIO:');
-  const jsonSearchFrom = prefixIdx !== -1
-    ? prefixIdx + 'GENERATE_AUDIO:'.length
-    : -1;
-
-  // Fallback: last top-level { in content (catches LLMs that forgot the prefix)
-  const scanFrom = jsonSearchFrom !== -1 ? jsonSearchFrom : 0;
+  const scanFrom = prefixIdx !== -1 ? prefixIdx + 'GENERATE_AUDIO:'.length : 0;
   const jsonStart = content.indexOf('{', scanFrom);
   if (jsonStart === -1) return null;
 
-  // Count braces to find the matching closing }
+  // Comment+string-aware brace counter — skips /* */, // and "strings" so
+  // their braces/chars don't confuse the depth count
   let depth = 0, i = jsonStart;
   while (i < content.length) {
-    if (content[i] === '{') depth++;
-    else if (content[i] === '}') { depth--; if (depth === 0) break; }
+    const ch = content[i];
+    if (ch === '/' && content[i + 1] === '*') {
+      const end = content.indexOf('*/', i + 2);
+      i = end !== -1 ? end + 2 : content.length;
+      continue;
+    }
+    if (ch === '/' && content[i + 1] === '/') {
+      const end = content.indexOf('\n', i + 2);
+      i = end !== -1 ? end + 1 : content.length;
+      continue;
+    }
+    if (ch === '"') {
+      i++;
+      while (i < content.length && content[i] !== '"') {
+        if (content[i] === '\\') i++;
+        i++;
+      }
+      i++;
+      continue;
+    }
+    if (ch === '{') depth++;
+    else if (ch === '}') { depth--; if (depth === 0) break; }
     i++;
   }
   if (depth !== 0) return null;
 
-  const jsonStr = content.slice(jsonStart, i + 1);
+  // Extract raw JSON, strip comments and fix trailing commas before parsing
+  const rawJson = content.slice(jsonStart, i + 1);
+  const cleanJson = rawJson
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')   // /* block comments */
+    .replace(/\/\/[^\n]*/g, '')            // // line comments
+    .replace(/,(\s*[}\]])/g, '$1');        // trailing commas
   try {
-    const params = JSON.parse(jsonStr);
-    if (!params.layers || !Array.isArray(params.layers)) return null;
+    const params = JSON.parse(cleanJson);
+    const hasLayers = Array.isArray(params.layers) && params.layers.length > 0;
+    const hasEvents = Array.isArray(params.events) && params.events.length > 0;
+    if (!hasLayers && !hasEvents) return null;
     const blockStart = prefixIdx !== -1 ? prefixIdx : jsonStart;
     return { params, blockStart, blockEnd: i + 1 };
   } catch(e) { return null; }
 }
 
-async function _generateAudio(params, wrapEl, autoplay = true) {
-  // Enforce max duration from settings
-  if (cfg.audioMaxDuration) params.duration = Math.min(params.duration || 4, cfg.audioMaxDuration);
+function _findComposeBlock(content) {
+  const prefixIdx = content.indexOf('COMPOSE_AUDIO:');
+  if (prefixIdx === -1) return null;
+  const scanFrom = prefixIdx + 'COMPOSE_AUDIO:'.length;
+  const jsonStart = content.indexOf('{', scanFrom);
+  if (jsonStart === -1) return null;
+  let depth = 0, i = jsonStart;
+  while (i < content.length) {
+    const ch = content[i];
+    if (ch === '"') { i++; while (i < content.length && content[i] !== '"') { if (content[i] === '\\') i++; i++; } i++; continue; }
+    if (ch === '{') depth++;
+    else if (ch === '}') { depth--; if (depth === 0) break; }
+    i++;
+  }
+  if (depth !== 0) return null;
+  const rawJson = content.slice(jsonStart, i + 1).replace(/,(\s*[}\]])/g, '$1');
+  try {
+    const params = JSON.parse(rawJson);
+    if (!params.description) return null;
+    return { params, blockStart: prefixIdx, blockEnd: i + 1 };
+  } catch(e) { return null; }
+}
+
+const _eqHtml = (cls='') =>
+  `<span class="audio-eq ${cls}"><span></span><span></span><span></span><span></span><span></span><span></span></span>`;
+
+async function _composeAudio(params, wrapEl, agKey, autoplay = true, onId = null) {
   const indicator = document.createElement('div');
-  indicator.style.cssText = 'font-size:12px;color:var(--text3);margin-top:8px;padding:6px 10px;background:var(--bg3);border-radius:var(--radius);display:inline-flex;align-items:center;gap:6px';
-  indicator.innerHTML = '<span class="ws-spin" style="display:inline-block;animation:spin 1s linear infinite">⟳</span> Generez sunet...';
+  indicator.style.cssText = 'font-size:12px;color:var(--text3);margin-top:8px;padding:8px 12px;background:var(--bg3);border-radius:var(--radius);display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border2)';
+  const label = document.createElement('span');
+  label.textContent = 'Plan structural...';
+  indicator.innerHTML = _eqHtml('compose');
+  indicator.appendChild(label);
+  wrapEl.appendChild(indicator);
+
+  const ag       = agKey || 'a';
+  const provider = cfg[ag + 'Provider']   || 'ollama';
+  const model    = cfg[ag + 'Model']      || '';
+  const api_key  = cfg[ag + 'ApiKey']     || '';
+  const server_url = cfg[ag + 'ServerUrl'] || 'http://localhost:11434';
+  // Background model for compose — use cfg.bgComposeModel if set, else same as agent
+  const bg_model      = cfg.bgComposeModel      || model;
+  const bg_provider   = cfg.bgComposeProvider   || provider;
+  const bg_server_url = cfg.bgComposeServerUrl  || server_url;
+  const bg_api_key    = cfg.bgComposeApiKey     || api_key;
+
+  try {
+    // Stage labels animate while waiting
+    const stages = ['Plan structural...', 'Realizare events...', 'Sinteză audio...'];
+    let si = 0;
+    const stageTick = setInterval(() => { si = (si+1) % stages.length; label.textContent = stages[si]; }, 4000);
+    const resp = await fetch('/api/audio/compose', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...params, provider, model, api_key, server_url,
+                             bg_model, bg_provider, bg_server_url, bg_api_key }),
+    });
+    clearInterval(stageTick);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: resp.statusText }));
+      let errMsg = err.error || resp.statusText;
+      if (errMsg.includes('timed out') || errMsg.includes('timeout'))
+        errMsg = 'Timeout — modelul e prea lent. Seteaza un model mai rapid in Setari → Model Compozitie.';
+      indicator.innerHTML = `<span style="color:#f87171">✗ ${errMsg}</span>`;
+      return;
+    }
+    const audioId = resp.headers.get('X-Audio-Id');
+    let url;
+    if (audioId) {
+      url = `/api/audio/cache/${audioId}`;
+      wrapEl.dataset.audioId = audioId;
+      if (onId) onId(audioId);
+    } else {
+      url = URL.createObjectURL(await resp.blob());
+    }
+
+    // Parse plan summary from header
+    let planHtml = '';
+    const planB64 = resp.headers.get('X-Compose-Plan');
+    if (planB64) {
+      try {
+        const plan = JSON.parse(atob(planB64));
+        const secs = (plan.sections || []).map(s =>
+          `<span style="color:var(--text2)">${s.name}</span> <span style="color:var(--text3)">${s.beats}b ${s.velocity}</span>`
+        ).join(' · ');
+        planHtml = `<div style="font-size:11px;color:var(--text3);margin-top:4px;margin-bottom:6px">
+          ${plan.key || ''} · ${plan.tempo || ''}BPM · ${plan.n_events || 0} events<br>${secs}</div>`;
+      } catch(e) {}
+    }
+
+    indicator.outerHTML = `${planHtml}<audio controls ${autoplay ? 'autoplay' : ''} style="width:100%;margin-top:4px" src="${url}"></audio>`;
+  } catch(e) {
+    clearInterval(stageTick);
+    indicator.innerHTML = `<span style="color:#f87171">✗ ${e.message}</span>`;
+  }
+}
+
+async function _generateAudio(params, wrapEl, autoplay = true, onId = null) {
+  // Enforce max duration from settings (skip cap when BPM is used — server recalculates from beats)
+  if (cfg.audioMaxDuration && !params.bpm) params.duration = Math.min(params.duration || 4, cfg.audioMaxDuration);
+  const indicator = document.createElement('div');
+  indicator.style.cssText = 'font-size:12px;color:var(--text3);margin-top:8px;padding:8px 12px;background:var(--bg3);border-radius:var(--radius);display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border2)';
+  indicator.innerHTML = _eqHtml() + '<span>Sintetizez audio...</span>';
   const bubble = wrapEl.querySelector('.msg-bubble');
   if (bubble) bubble.appendChild(indicator);
   try {
@@ -1676,8 +1832,15 @@ async function _generateAudio(params, wrapEl, autoplay = true) {
       body: JSON.stringify({params})
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
+    const audioId = resp.headers.get('X-Audio-Id');
+    let url;
+    if (audioId) {
+      url = `/api/audio/cache/${audioId}`;
+      wrapEl.dataset.audioId = audioId;
+      if (onId) onId(audioId);
+    } else {
+      url = URL.createObjectURL(await resp.blob());
+    }
 
     const container = document.createElement('div');
     container.style.cssText = 'margin-top:8px';
@@ -1955,32 +2118,48 @@ async function runWebSearch(agKey, reason, query) {
 // ─── REGULI TEHNICE INJECTATE AUTOMAT ───
 const _AUDIO_TOOL_RULE =
 '\n\n### Audio Synthesis\n' +
-'Poti genera sunete/melodii emitand la finalul mesajului urmatorul bloc (prefixul GENERATE_AUDIO: este obligatoriu):\n\n' +
+'Poti genera sunete/melodii emitand la finalul mesajului urmatorul bloc JSON (prefixul GENERATE_AUDIO: este obligatoriu):\n\n' +
 'GENERATE_AUDIO: {\n' +
-'  "bpm": 120,\n' +
-'  "layers": [\n' +
-'    {"wave": "piano", "note": "C4", "beat": 0, "beats": 2, "amplitude": 0.7, "adsr": [0.01, 0.3, 0.5, 0.4]},\n' +
-'    {"wave": "strings", "note": "E4", "beat": 0, "beats": 4, "amplitude": 0.4, "adsr": [0.3, 0.2, 0.8, 0.5]}\n' +
+'  "tempo": 120,\n' +
+'  "events": [\n' +
+'    {"track": "drums",   "note": "kick",  "start": 0,   "beats": 0.5, "velocity": "f"},\n' +
+'    {"track": "drums",   "note": "hihat", "start": 0,   "beats": 0.25,"velocity": "mp"},\n' +
+'    {"track": "drums",   "note": "snare", "start": 1,   "beats": 0.5, "velocity": "f"},\n' +
+'    {"track": "bass",    "note": "A2",    "start": 0,   "beats": 2,   "velocity": "mf"},\n' +
+'    {"track": "piano",   "note": "E4",    "start": 0,   "beats": 1,   "velocity": "mp"}\n' +
 '  ],\n' +
-'  "effects": [{"type": "reverb", "wet": 0.4}]\n' +
+'  "effects": [{"type": "reverb", "wet": 0.3, "room": 0.4}]\n' +
 '}\n\n' +
-'Schema parametri:\n' +
-'- bpm: tempo (beats per minute) — foloseste impreuna cu "beat"/"beats" in loc de "start"/"end" in secunde\n' +
-'- duration: secunde total (max {maxDur}) — calculat automat din beats daca nu e specificat\n' +
-'- layers[]: fiecare element are:\n' +
-'  - wave: timbru instrumental — "piano" | "bell" | "organ" | "strings" | "flute" | "brass"\n' +
-'           sau oscilator simplu — "sine" | "square" | "sawtooth" | "triangle" | "noise"\n' +
-'  - note: "C4","A4","F#3","Bb5" (A4=440Hz, C4=261Hz) SAU freq: valoare Hz\n' +
-'  - beat/beats: pozitie si durata in beats (preferat cu bpm) SAU start/end: secunde\n' +
-'  - amplitude: 0.0–1.0\n' +
-'  - adsr: [attack_sec, decay_sec, sustain_0-1, release_sec]\n' +
-'- effects[]: {"type":"reverb","wet":0-1} | {"type":"echo","delay":sec,"decay":0-1} | {"type":"lowpass","cutoff":Hz} | {"type":"highpass","cutoff":Hz}\n\n' +
-'Sfaturi compozitie:\n' +
-'- Acord: mai multe layers cu acelasi beat/beats\n' +
-'- Melodie: layers consecutive cu beat crescator\n' +
-'- Piano: adsr scurt decay (0.01, 0.3, 0.5, 0.3). Strings: attack lung (0.3, 0.2, 0.8, 0.5)\n' +
-'- Bell: fara sustain (0.01, 0.01, 0.0, 1.5). Organ: sustain lung (0.01, 0.01, 0.9, 0.1)\n' +
-'IMPORTANT: prefixul "GENERATE_AUDIO:" pe linie separata, urmat de JSON (poate fi formatat pe mai multe linii).';
+'Schema:\n' +
+'- tempo: BPM (60=Largo, 84=Andante, 108=Moderato, 120=Allegretto, 144=Allegro, 168=Presto)\n' +
+'- events[]: fiecare nota/acord are:\n' +
+'  - track: instrument — "piano" | "bass" | "strings" | "bell" | "organ" | "flute" | "brass" | "drums"\n' +
+'            sau rol muzical — "melody"→piano, "chords"/"pad"→strings, "bass_line"→bass\n' +
+'  - note: pentru instrumente melodice: "C4","A4","F#3","Bb5" (A4=440Hz) SAU acord: ["C4","E4","G4"]\n' +
+'          pentru "drums": "kick"|"snare"|"hihat"|"open_hihat"|"crash"|"ride"|"hi_tom"|"mid_tom"|"floor_tom"|"clap"|"cowbell"\n' +
+'  - start: pozitie in beats (float) de la inceputul piesei\n' +
+'  - beats: durata — 4=intreaga, 2=jumatate, 1=patrime, 0.5=optime, 0.25=saisprezecime\n' +
+'  - velocity: dinamica — "ppp"|"pp"|"p"|"mp"|"mf"|"f"|"ff"|"fff"\n' +
+'              Variaza velocity pentru expresivitate: downbeats "f", note de tranzitie "mp"\n' +
+'- effects[]: {"type":"reverb","wet":0-1,"room":0-1} | {"type":"echo","delay":sec,"decay":0-1} | {"type":"lowpass","cutoff":Hz}\n' +
+'              reverb.room: 0=camera mica, 0.5=sala medie, 1=sala de concert (default 0.5)\n\n' +
+'Reguli compozitie:\n' +
+'- Acopera TOT intervalul piesei cu events (nu lasa goluri de >4 beats fara nici o voce activa)\n' +
+'- Distribuie events pe toata durata, nu le concentra la inceput\n' +
+'- Alterneaza note scurte (0.5) cu lungi (2-4) pentru ritm variat\n' +
+'- Strings/pad: start lung (4-8 beats) ca armonie de fundal sub melodie\n' +
+'- Acorduri: "note": ["C4","E4","G4"] sau events separate cu acelasi start\n' +
+'IMPORTANT: prefixul "GENERATE_AUDIO:" pe linie separata, urmat de JSON (poate fi multiline).\n\n' +
+'### Compozitie in doi pasi (recomandat pentru piese complexe)\n' +
+'Alternativ, poti delega planificarea si compunerea catre server folosind:\n\n' +
+'COMPOSE_AUDIO: {\n' +
+'  "description": "sonata in La minor, 30 secunde, Allegro, cu melodie clara si progresie i-VI-VII-V",\n' +
+'  "style": "classical"\n' +
+'}\n\n' +
+'Serverul va face automat: (1) plan structural → (2) realizare events → (3) sinteza audio.\n' +
+'Foloseste COMPOSE_AUDIO cand descrii o piesa complexa si vrei ca structura sa fie planificata corect.\n' +
+'Foloseste GENERATE_AUDIO cand controlezi manual fiecare nota.\n' +
+'In ambele cazuri, descrie TEXTUAL ce ai compus inainte de blocul JSON.';
 
 const _TECH_RULES = '\n\n---\n## REGULI TEHNICE (injectate automat — nu le mentiona)\n\n' +
 '### Incheierea discutiei\n' +
@@ -2418,12 +2597,22 @@ async function streamTurn(agKey, isFinal) {
     updateCtxBar();
     autosaveDiscussion();
   }
-  // Detect GENERATE_AUDIO pattern (multi-line JSON supported)
-  const audioBlock = cfg.audioEnabled ? _findAudioBlock(fullContent) : null;
-  if (audioBlock) {
+  // Detect COMPOSE_AUDIO (two-stage LLM planning) or GENERATE_AUDIO (direct)
+  const composeBlock = cfg.audioEnabled ? _findComposeBlock(fullContent) : null;
+  const audioBlock   = cfg.audioEnabled && !composeBlock ? _findAudioBlock(fullContent) : null;
+  const _saveAudioId = (id) => {
+    if (!id) return;
+    const last = state.discussion[state.discussion.length - 1];
+    if (last && last.role === agKey) { last.audioId = id; autosaveDiscussion(); }
+  };
+  if (composeBlock) {
+    const clean = (fullContent.slice(0, composeBlock.blockStart) + fullContent.slice(composeBlock.blockEnd)).trimEnd();
+    if (clean !== fullContent) { updateBubbleContent(wrap, clean); renderMermaidIn(wrap); }
+    _composeAudio(composeBlock.params, wrap, agKey, false, _saveAudioId);
+  } else if (audioBlock) {
     const cleanForAudio = (fullContent.slice(0, audioBlock.blockStart) + fullContent.slice(audioBlock.blockEnd)).trimEnd();
-    if (cleanForAudio !== fullContent) updateBubbleContent(wrap, cleanForAudio);
-    _generateAudio(audioBlock.params, wrap, true);
+    if (cleanForAudio !== fullContent) { updateBubbleContent(wrap, cleanForAudio); renderMermaidIn(wrap); }
+    _generateAudio(audioBlock.params, wrap, false, _saveAudioId);
   }
 
   // Detect WEB_SEARCH pattern (check both main content and thinking block)
@@ -2710,16 +2899,18 @@ function addSystemMsg(text) {
   appendMsg(wrap);
 }
 
-function addMessageToUI(role, content, name) {
+function addMessageToUI(role, content, name, audioId = null) {
   const cls = role === 'user' ? 'user' : role === 'a' ? 'agent-a' : role === 'b' ? 'agent-b' : 'agent-s';
   const color = role === 'user' ? 'var(--accent)'
                : role === 'a' ? 'var(--agent-a)'
                : role === 'b' ? 'var(--agent-b)' : 'var(--accent)';
 
-  // Strip GENERATE_AUDIO block from display; re-synthesize without autoplay
-  const _audioBlock = _findAudioBlock(content);
-  const displayContent = _audioBlock
-    ? (content.slice(0, _audioBlock.blockStart) + content.slice(_audioBlock.blockEnd)).trimEnd()
+  // Strip audio blocks from display
+  const _composeBlock = _findComposeBlock(content);
+  const _audioBlock   = !_composeBlock ? _findAudioBlock(content) : null;
+  const _activeBlock  = _composeBlock || _audioBlock;
+  const displayContent = _activeBlock
+    ? (content.slice(0, _activeBlock.blockStart) + content.slice(_activeBlock.blockEnd)).trimEnd()
     : content;
 
   const wrap = document.createElement('div');
@@ -2733,8 +2924,21 @@ function addMessageToUI(role, content, name) {
   renderMermaidIn(wrap);
   _initHtmlIframes(wrap);
 
-  if (_audioBlock) {
-    _generateAudio(_audioBlock.params, wrap, false); // restore = no autoplay
+  if (_activeBlock) {
+    const bubble = wrap.querySelector('.msg-bubble');
+    if (audioId) {
+      // Restore from server cache — no re-synthesis needed
+      const audioEl = document.createElement('audio');
+      audioEl.src = `/api/audio/cache/${audioId}`;
+      audioEl.controls = true;
+      audioEl.style.cssText = 'width:100%;margin-top:8px';
+      if (bubble) bubble.appendChild(audioEl);
+    } else if (_composeBlock) {
+      const agKey = role === 'a' ? 'a' : 'b';
+      _composeAudio(_composeBlock.params, wrap, agKey, false);
+    } else if (_audioBlock) {
+      _generateAudio(_audioBlock.params, wrap, false);
+    }
   }
 }
 
@@ -3853,7 +4057,7 @@ function _rebuildMessagesUI() {
       : entry.role === 'a' ? (cfg.aName || 'Agent A')
       : entry.role === 'b' ? (cfg.bName || 'Agent B')
       : (cfg.sName || 'Sinteză');
-    addMessageToUI(entry.role, entry.content, name);
+    addMessageToUI(entry.role, entry.content, name, entry.audioId || null);
   }
 
   addSystemMsg('📂 Sesiune restaurată din snapshot.');

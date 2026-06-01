@@ -8,3 +8,4 @@ services:
     volumes:
       - ./settings.json:/app/settings.json
       - ./chat.json:/app/chat.json
+      - ./audio_cache:/app/audio_cache

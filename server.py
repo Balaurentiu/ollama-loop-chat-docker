@@ -189,6 +189,14 @@ def debug_page():
     for u in reversed(_debug_uploads):
         if u['kind'] == 'text':
             content_html = f'<pre style="background:#0d0d1a;padding:12px;border-radius:6px;overflow-x:auto;max-height:400px;font-size:12px;color:#ccc;white-space:pre-wrap;word-break:break-all">{u["text"]}</pre>'
+        elif u['kind'] == 'audio':
+            info = u.get('audio_info', '')
+            path = u.get('save_path', '')
+            content_html = (
+                f'<audio controls style="width:100%;margin-bottom:8px" src="/debug/audio/{u["id"]}"></audio>'
+                f'<div style="color:#888;font-size:12px">{info}</div>'
+                f'<div style="color:#555;font-size:11px;margin-top:4px">path: <code>{path}</code></div>'
+            )
         else:
             content_html = f'<img src="/debug/img/{u["id"]}" style="max-width:100%;border-radius:6px;border:1px solid #333">'
         items_html += f"""
@@ -230,7 +238,7 @@ def debug_page():
 
 @app.route("/debug/upload", methods=["POST"])
 def debug_upload():
-    import uuid, datetime, html as html_lib
+    import uuid, datetime, html as html_lib, wave as wave_lib, io
     f = request.files.get("file")
     if not f:
         return "no file", 400
@@ -238,18 +246,40 @@ def debug_upload():
     data = f.read()
     comment = html_lib.escape(request.form.get("comment", "").strip())
     fname = f.filename or ''
-    is_text = fname.lower().endswith(('.txt', '.log')) or (f.content_type or '').startswith('text/')
+    fname_lower = fname.lower()
+    is_text  = fname_lower.endswith(('.txt', '.log', '.py', '.js', '.json', '.md', '.csv', '.html', '.css')) or (f.content_type or '').startswith('text/')
+    is_audio = fname_lower.endswith(('.wav', '.mp3', '.ogg', '.flac'))
+
+    # Save file to /tmp/ so it can be read/analyzed externally
+    save_path = f'/tmp/debug_{uid}_{fname}'
+    with open(save_path, 'wb') as fp:
+        fp.write(data)
+
+    # For WAV: extract basic stats
+    audio_info = ''
+    if fname_lower.endswith('.wav'):
+        try:
+            with wave_lib.open(io.BytesIO(data)) as wf:
+                dur = wf.getnframes() / wf.getframerate()
+                audio_info = f'{dur:.2f}s · {wf.getframerate()}Hz · {wf.getnchannels()}ch · {len(data)//1024}KB'
+        except Exception as e:
+            audio_info = f'(wav parse error: {e})'
+
+    kind = 'text' if is_text else ('audio' if is_audio else 'image')
     entry = {
         "id": uid, "data": data, "comment": comment,
         "time": datetime.datetime.now().strftime("%H:%M:%S"),
         "filename": html_lib.escape(fname),
-        "kind": "text" if is_text else "image",
+        "kind": kind, "save_path": save_path,
+        "audio_info": audio_info,
     }
     if is_text:
         entry["text"] = html_lib.escape(data.decode('utf-8', errors='replace'))
     _debug_uploads.append(entry)
     return f"""<html><body style="background:#111;color:#eee;font-family:sans-serif;text-align:center;padding:60px">
     <h2 style="color:#22c55e">✓ Upload reușit!</h2>
+    <p style="color:#888;font-size:14px">Salvat la: <code style="color:#4a9eff">{html_lib.escape(save_path)}</code></p>
+    {f'<p style="color:#aaa;font-size:14px">Audio: {audio_info}</p>' if audio_info else ''}
     <a href="/debug" style="color:#4a9eff">← Înapoi</a></body></html>"""
 
 @app.route("/debug/img/<uid>")
@@ -259,6 +289,17 @@ def debug_img(uid):
             from flask import make_response
             r = make_response(u["data"])
             r.headers["Content-Type"] = "image/png"
+            return r
+    return "not found", 404
+
+@app.route("/debug/audio/<uid>")
+def debug_audio(uid):
+    for u in _debug_uploads:
+        if u["id"] == uid and u["kind"] == "audio":
+            from flask import make_response
+            r = make_response(u["data"])
+            fname = u.get("filename", "audio.wav")
+            r.headers["Content-Type"] = "audio/wav" if fname.endswith(".wav") else "audio/mpeg"
             return r
     return "not found", 404
 
@@ -770,7 +811,7 @@ def delete_chat_history():
 
 # ── WEB SEARCH ────────────────────────────────────────────────────────────────
 
-def _call_llm_simple(provider, model, prompt, api_key='', server_url='http://192.168.0.17:11434', temp=0.3, ctx=8192):
+def _call_llm_simple(provider, model, prompt, api_key='', server_url='http://192.168.0.17:11434', temp=0.3, ctx=8192, timeout=90):
     """Non-streaming LLM call. Returns text response string."""
     if provider == 'ollama':
         server = server_url.rstrip('/')
@@ -780,7 +821,7 @@ def _call_llm_simple(provider, model, prompt, api_key='', server_url='http://192
             'stream': False,
             'options': {'temperature': temp, 'num_ctx': ctx},
         }
-        resp = requests.post(f'{server}/api/chat', json=payload, timeout=90)
+        resp = requests.post(f'{server}/api/chat', json=payload, timeout=timeout)
         resp.raise_for_status()
         return resp.json().get('message', {}).get('content', '')
 
@@ -797,7 +838,7 @@ def _call_llm_simple(provider, model, prompt, api_key='', server_url='http://192
             'stream': False,
         }
         resp = requests.post('https://api.openai.com/v1/chat/completions',
-                             headers=headers, json=payload, timeout=90)
+                             headers=headers, json=payload, timeout=timeout)
         resp.raise_for_status()
         return resp.json()['choices'][0]['message']['content']
 
@@ -808,7 +849,7 @@ def _call_llm_simple(provider, model, prompt, api_key='', server_url='http://192
         }
         url = (f'https://generativelanguage.googleapis.com/v1beta/models/'
                f'{model}:generateContent?key={api_key}')
-        resp = requests.post(url, json=payload, timeout=90)
+        resp = requests.post(url, json=payload, timeout=timeout)
         resp.raise_for_status()
         candidates = resp.json().get('candidates', [])
         if candidates:
@@ -829,7 +870,7 @@ def _call_llm_simple(provider, model, prompt, api_key='', server_url='http://192
             'max_tokens': ctx,
         }
         resp = requests.post('https://api.anthropic.com/v1/messages',
-                             headers=headers, json=payload, timeout=90)
+                             headers=headers, json=payload, timeout=timeout)
         resp.raise_for_status()
         content = resp.json().get('content', [])
         return ''.join(c.get('text', '') for c in content if c.get('type') == 'text')
@@ -1863,6 +1904,123 @@ def websearch_status_list():
 
 # ── AUDIO SYNTHESIS ────────────────────────────────────────────────────────────
 
+def _loads_lenient(s):
+    """json.loads with common LLM fixes: markdown fences, trailing commas, text around JSON."""
+    import json as _json, re as _re
+    if not isinstance(s, str):
+        return None
+    try:
+        return _json.loads(s)
+    except Exception:
+        pass
+    fixed = s.strip()
+    fixed = _re.sub(r'^```[a-zA-Z]*\s*', '', fixed)
+    fixed = _re.sub(r'\s*```$', '', fixed.strip())
+    fixed = _re.sub(r'//[^\n]*', '', fixed)
+    fixed = _re.sub(r'/\*[\s\S]*?\*/', ' ', fixed)
+    fixed = _re.sub(r',\s*([}\]])', r'\1', fixed)
+    fixed = _re.sub(r"(?<![\w\"'])'([^'\n]*?)'(\s*:)", r'"\1"\2', fixed)
+    fixed = _re.sub(r":\s*'([^'\n]*?)'", r': "\1"', fixed)
+    try:
+        return _json.loads(fixed)
+    except Exception:
+        pass
+    # Last resort: extract first {...} block using brace counting
+    start = fixed.find('{')
+    if start == -1:
+        return None
+    depth, i = 0, start
+    while i < len(fixed):
+        if fixed[i] == '"':
+            i += 1
+            while i < len(fixed) and fixed[i] != '"':
+                if fixed[i] == '\\': i += 1
+                i += 1
+        elif fixed[i] == '{': depth += 1
+        elif fixed[i] == '}':
+            depth -= 1
+            if depth == 0:
+                chunk = fixed[start:i+1]
+                chunk = _re.sub(r',\s*([}\]])', r'\1', chunk)
+                try:
+                    return _json.loads(chunk)
+                except Exception:
+                    return None
+        i += 1
+    return None
+
+
+_DYN_MAP = {
+    "ppp": 0.20, "pp": 0.30, "p": 0.45, "mp": 0.55,
+    "mf": 0.68, "f": 0.80, "ff": 0.92, "fff": 1.0,
+}
+_TRACK_AMP_DEFAULTS = {
+    'piano': 0.72, 'epiano': 0.70, 'organ': 0.68, 'guitar': 0.70,
+    'bass': 0.62, 'strings': 0.60, 'ensemble': 0.60, 'choir': 0.62,
+    'trumpet': 0.70, 'brass': 0.68, 'saxophone': 0.70, 'flute': 0.66,
+    'bell': 0.65, 'marimba': 0.68, 'xylophone': 0.68, 'pad': 0.55,
+    'sine': 0.70, 'square': 0.70, 'sawtooth': 0.68, 'drums': 0.78,
+}
+_MIDI_NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
+_TRACK_TO_WAVE = {
+    'melody': 'piano', 'lead': 'piano', 'bass': 'bass', 'bass_line': 'bass',
+    'chords': 'strings', 'harmony': 'strings', 'pad': 'strings',
+    'piano': 'piano', 'strings': 'strings', 'bell': 'bell', 'bells': 'bell',
+    'organ': 'organ', 'flute': 'flute', 'brass': 'brass',
+    'drums': 'drums', 'drum': 'drums', 'percussion': 'drums', 'perc': 'drums',
+    'kick': 'drums', 'snare': 'drums', 'hihat': 'drums',
+    'sine': 'sine', 'square': 'square', 'sawtooth': 'sawtooth',
+}
+
+def _normalize_audio_params(params):
+    """Normalize events-format (midi-v7 style) to our internal layers format."""
+    if 'tempo' in params and 'bpm' not in params:
+        params['bpm'] = params.pop('tempo')
+    if 'events' in params and 'layers' not in params:
+        params['layers'] = params.pop('events')
+    expanded = []
+    for layer in params.get('layers', []):
+        if 'start' in layer and 'beat' not in layer:
+            layer['beat'] = layer.pop('start')
+        if 'track' in layer and 'wave' not in layer:
+            t = str(layer.pop('track')).lower().strip()
+            if ':' in t:
+                t = t.split(':')[-1].strip()
+            layer['wave'] = _TRACK_TO_WAVE.get(t, t)
+        vel = layer.pop('velocity', None) or layer.pop('dynamic', None)
+        if vel is not None and 'amplitude' not in layer:
+            if isinstance(vel, str):
+                raw_amp = _DYN_MAP.get(vel.lower().strip(), 0.68)
+            else:
+                raw_amp = max(0.0, min(1.0, float(vel) / 127.0))
+            # Clamp per-note velocity to a narrow range to avoid large fluctuations
+            layer['amplitude'] = max(0.58, min(0.82, raw_amp))
+        # Apply per-track default if no amplitude specified
+        if 'amplitude' not in layer:
+            wt = layer.get('wave') or _TRACK_TO_WAVE.get(
+                str(layer.get('track', '')).lower().strip().split(':')[-1].strip(), 'piano')
+            layer['amplitude'] = _TRACK_AMP_DEFAULTS.get(wt, 0.68)
+        note = layer.get('note')
+        # Handle string-encoded chord like "[C4 E5 G4]" or "[C4, E5, G4]"
+        if isinstance(note, str) and note.strip().startswith('['):
+            import re as _re2
+            note = [n.strip() for n in _re2.split(r'[\s,]+', note.strip().strip('[]')) if n.strip()]
+            layer['note'] = note
+        if isinstance(note, list):
+            base = {k: v for k, v in layer.items() if k != 'note'}
+            for n in note:
+                nl = dict(base)
+                nl['note'] = (f"{_MIDI_NOTE_NAMES[int(n)%12]}{int(n)//12-1}"
+                              if isinstance(n, (int, float)) else str(n))
+                expanded.append(nl)
+        else:
+            if isinstance(note, (int, float)):
+                layer['note'] = f"{_MIDI_NOTE_NAMES[int(note)%12]}{int(note)//12-1}"
+            expanded.append(layer)
+    params['layers'] = expanded
+    return params
+
+
 def _audio_note_freq(note_str):
     """Convert note name (A4, C#3, Bb5) to frequency in Hz."""
     import re as _re
@@ -1917,15 +2075,221 @@ def _gen_timbre(wave_type, freq, n, sr, _np):
     return w / peak if peak > 0 else w
 
 
+# GM program numbers for each timbre (0-indexed)
+_GM_PROGRAMS = {
+    'piano':    0,   # Acoustic Grand Piano
+    'epiano':   4,   # Electric Piano 1
+    'organ':    19,  # Church Organ
+    'guitar':   25,  # Acoustic Guitar (steel)
+    'bass':     32,  # Acoustic Bass
+    'strings':  48,  # String Ensemble 1
+    'ensemble': 49,  # String Ensemble 2
+    'choir':    52,  # Choir Aahs
+    'trumpet':  56,  # Trumpet
+    'brass':    61,  # Brass Section
+    'saxophone':65,  # Alto Sax
+    'flute':    73,  # Flute
+    'bell':     9,   # Glockenspiel  (program 9)
+    'marimba':  12,  # Marimba
+    'xylophone':13,  # Xylophone
+    'pad':      89,  # Pad 2 (warm)
+    'sine':     80,  # Lead 1 (square) — closest to pure sine
+    'square':   80,
+    'sawtooth': 81,  # Lead 2 (sawtooth)
+}
+
+_SF2_PATH = '/usr/share/sounds/sf2/GeneralUser_GS.sf2'
+
+# GM percussion channel 9 — note numbers for common drum sounds
+_DRUM_NOTES = {
+    # kick / bass drum
+    'kick': 36, 'bass_drum': 36, 'bd': 36,
+    # snare
+    'snare': 38, 'sd': 38, 'rimshot': 37,
+    # hi-hat
+    'hihat': 42, 'hi_hat': 42, 'closed_hihat': 42, 'chh': 42,
+    'open_hihat': 46, 'ohh': 46,
+    # toms
+    'hi_tom': 50, 'mid_tom': 47, 'floor_tom': 43, 'lo_tom': 43,
+    # cymbals
+    'crash': 49, 'ride': 51, 'ride_bell': 53,
+    # extras
+    'clap': 39, 'cowbell': 56, 'tambourine': 54, 'shaker': 82,
+    'wood': 76, 'block': 76, 'clave': 75,
+}
+
+
+def _audio_synth_fluidsynth(params):
+    """Synthesize using FluidSynth + GeneralUser GS soundfont. Returns WAV bytes or None on failure."""
+    import os, tempfile, subprocess, io as _io, struct
+    if not os.path.exists(_SF2_PATH):
+        return None
+    try:
+        from midiutil import MIDIFile
+    except ImportError:
+        return None
+
+    layers = params.get('layers', [])
+    if not layers:
+        return None
+
+    # Build a multi-track MIDI file
+    # Channel 9 is always GM percussion; melodic tracks get channels 0-8, 10-15
+    track_map = {}   # wave_type → (track_idx, channel)
+    midi_tracks = []
+    _melodic_chs = [c for c in range(16) if c != 9]
+    _mel_idx = [0]
+
+    def get_track(wave_type):
+        if wave_type not in track_map:
+            idx = len(midi_tracks)
+            if wave_type == 'drums':
+                ch = 9  # GM percussion channel — always channel 9
+            else:
+                ch = _melodic_chs[_mel_idx[0] % len(_melodic_chs)]
+                _mel_idx[0] += 1
+            track_map[wave_type] = (idx, ch)
+            midi_tracks.append(wave_type)
+        return track_map[wave_type]
+
+    bpm = float(params.get('bpm', 120))
+    n_tracks = max(len(set(l.get('wave', 'piano') for l in layers)), 1)
+    midi = MIDIFile(n_tracks, deinterleave=False)
+
+    # Pre-pass: assign tracks + set programs
+    programs_set = set()
+    for layer in layers:
+        wt = layer.get('wave', 'piano')
+        tidx, ch = get_track(wt)
+        if (tidx, ch) not in programs_set:
+            midi.addTrackName(tidx, 0, wt)
+            midi.addTempo(tidx, 0, bpm)
+            if wt != 'drums':  # no program change on percussion channel
+                prog = _GM_PROGRAMS.get(wt, 0)
+                midi.addProgramChange(tidx, ch, 0, prog)
+            programs_set.add((tidx, ch))
+
+    # Add notes
+    import math as _math
+    beat_s = 60.0 / bpm
+    for layer in layers:
+        wt   = layer.get('wave', 'piano')
+        tidx, ch = get_track(wt)
+        note_str = str(layer.get('note', 'C4')).strip().lower()
+        amp  = float(layer.get('amplitude', 0.68))
+        vel  = max(1, min(127, int(amp * 127)))
+
+        # Convert start/end (seconds) back to beats for MIDI
+        start_s = float(layer.get('start', 0.0))
+        end_s   = float(layer.get('end', start_s + 1.0))
+        dur_s   = max(0.05, end_s - start_s)
+        start_b = start_s / beat_s
+        dur_b   = dur_s / beat_s
+
+        # Resolve MIDI note number
+        if wt == 'drums':
+            midi_note = _DRUM_NOTES.get(note_str)
+            if midi_note is None:
+                # Try integer literal (e.g. "36")
+                try:
+                    midi_note = int(note_str)
+                except ValueError:
+                    continue
+            midi.addNote(tidx, ch, midi_note, start_b, max(0.1, dur_b), vel)
+            continue
+
+        # Melodic note name → MIDI number
+        try:
+            freq = _audio_note_freq(note_str.upper() if len(note_str) <= 3 else note_str)
+            midi_note = int(round(69 + 12 * _math.log2(freq / 440.0)))
+            midi_note = max(0, min(127, midi_note))
+            midi.addNote(tidx, ch, midi_note, start_b, dur_b, vel)
+        except (ValueError, Exception):
+            continue
+
+    # Write MIDI to temp file
+    with tempfile.NamedTemporaryFile(suffix='.mid', delete=False) as mf:
+        midi_path = mf.name
+        midi.writeFile(mf)
+
+    wav_path = midi_path.replace('.mid', '.wav')
+    try:
+        # Render with FluidSynth
+        result = subprocess.run(
+            ['fluidsynth', '-ni', '-g', '1.0', '-r', '44100',
+             _SF2_PATH, midi_path, '-F', wav_path],
+            capture_output=True, timeout=30
+        )
+        if result.returncode != 0 or not os.path.exists(wav_path):
+            return None
+
+        # Always load WAV: apply optional effects + RMS normalization
+        import numpy as _np
+        from scipy.io import wavfile as _wf
+        sr, data = _wf.read(wav_path)
+        if data.ndim == 2:
+            mix = data.mean(axis=1).astype(_np.float64) / 32768.0
+        else:
+            mix = data.astype(_np.float64) / 32768.0
+        n_total = len(mix)
+
+        for fx in params.get('effects', []):
+            ft = fx.get('type', '')
+            if ft == 'reverb':
+                from scipy.signal import lfilter as _lf
+                wet  = float(fx.get('wet',  0.3))
+                room = float(fx.get('room', 0.5))
+                fb   = 0.50 + room * 0.44
+                comb_ms = [1116, 1188, 1277, 1356]
+                rev = _np.zeros(n_total)
+                for dm in comb_ms:
+                    d = int(dm * sr / 44100)
+                    a = _np.zeros(d + 1); a[0] = 1.0; a[d] = -fb
+                    rev += _lf([1.0], a, mix)
+                rev /= len(comb_ms)
+                for dm, ap in [(556, 0.5), (441, 0.5)]:
+                    d = int(dm * sr / 44100)
+                    b = _np.zeros(d + 1); b[0] = -ap; b[d] = 1.0
+                    a = _np.zeros(d + 1); a[0] =  1.0; a[d] = -ap
+                    rev = _lf(b, a, rev)
+                mix = mix * (1.0 - wet) + rev * wet
+            elif ft in ('lowpass', 'highpass'):
+                from scipy.signal import butter, filtfilt
+                cutoff = float(fx.get('cutoff', 2000))
+                nyq = sr / 2.0
+                if 0 < cutoff < nyq:
+                    btype = 'low' if ft == 'lowpass' else 'high'
+                    b, a = butter(4, cutoff / nyq, btype=btype)
+                    mix = filtfilt(b, a, mix)
+
+        # RMS normalization → -16 dBFS (consistent loudness regardless of velocity spread)
+        rms = _np.sqrt(_np.mean(mix ** 2))
+        if rms > 1e-6:
+            mix = _np.clip(mix * (0.158 / rms), -1.0, 1.0)
+
+        pcm = (mix * 32767).astype(_np.int16)
+        buf = _io.BytesIO()
+        _wf.write(buf, sr, pcm)
+        return buf.getvalue()
+
+    finally:
+        for p in (midi_path, wav_path):
+            try:
+                os.unlink(p)
+            except Exception:
+                pass
+
+
 def _audio_synth(params):
     """Synthesize audio from JSON params dict. Returns WAV bytes."""
     import numpy as _np
     from scipy.io import wavfile as _wf
     import io as _io
 
-    SR = 44100
+    _normalize_audio_params(params)
 
-    # ── BPM → seconds preprocessing ───────────────────────────────────────────
+    # ── BPM → seconds preprocessing (needed by both paths) ────────────────────
+    SR = 44100
     bpm = float(params.get('bpm', 0))
     if bpm > 0:
         beat_s = 60.0 / bpm
@@ -1934,10 +2298,20 @@ def _audio_synth(params):
                 layer['start'] = float(layer['beat']) * beat_s
             if 'beats' in layer and 'end' not in layer:
                 layer['end'] = layer.get('start', 0.0) + float(layer['beats']) * beat_s
-        if not params.get('duration'):
-            max_end = max((l.get('end', 0) for l in params.get('layers', [])), default=4.0)
-            params['duration'] = max_end + beat_s   # one beat of silence at end
+        # Always recalculate from beats; explicit 'duration' is ignored in BPM mode
+        max_end = max((l.get('end', 0) for l in params.get('layers', [])), default=4.0)
+        params['duration'] = max_end + beat_s   # one beat of silence at end
 
+    # ── Try FluidSynth first (real instrument samples) ─────────────────────────
+    try:
+        fs_wav = _audio_synth_fluidsynth(params)
+        if fs_wav:
+            print('[synth] FluidSynth OK', flush=True)
+            return fs_wav
+    except Exception as _fse:
+        print(f'[synth] FluidSynth failed, using additive: {_fse}', flush=True)
+
+    # ── Additive synthesis fallback ────────────────────────────────────────────
     duration = min(float(params.get('duration', 4.0)), 30.0)
     n_total = int(SR * duration)
     mix = _np.zeros(n_total, dtype=_np.float64)
@@ -1945,17 +2319,75 @@ def _audio_synth(params):
     for layer in params.get('layers', []):
         wave_type = layer.get('wave', 'sine')
         note = layer.get('note')
-        freq = _audio_note_freq(note) if note else float(layer.get('freq', 440.0))
-        t0 = max(0.0, float(layer.get('start', 0.0)))
-        t1 = min(float(layer.get('end', duration)), duration)
-        amp = float(layer.get('amplitude', 0.5))
+        amp  = float(layer.get('amplitude', 0.5))
+        t0   = max(0.0, float(layer.get('start', 0.0)))
+        t1   = min(float(layer.get('end', duration)), duration)
         s0, s1 = int(t0 * SR), min(int(t1 * SR), n_total)
         n = s1 - s0
         if n <= 0:
             continue
-        t = _np.linspace(0, n / SR, n, endpoint=False)
+
+        # ── Drum fallback synthesis ────────────────────────────────────────────
+        if wave_type == 'drums':
+            note_key = str(note or '').strip().lower()
+            drum_id  = _DRUM_NOTES.get(note_key, 36)
+            n_d = min(n, int(0.15 * SR))  # drums are short
+            if drum_id in (36,):   # kick — thump: fast sine sweep 150→50 Hz
+                t_d = _np.linspace(0, n_d / SR, n_d, endpoint=False)
+                freq_sweep = 150 * _np.exp(-30 * t_d)
+                env = _np.exp(-20 * t_d)
+                w = _np.sin(2 * _np.pi * freq_sweep * t_d) * env
+            elif drum_id in (38, 37):  # snare — noise + tone burst
+                t_d = _np.linspace(0, n_d / SR, n_d, endpoint=False)
+                noise = _np.random.default_rng(42).standard_normal(n_d)
+                tone  = _np.sin(2 * _np.pi * 200 * t_d)
+                env   = _np.exp(-25 * t_d)
+                w = (0.6 * noise + 0.4 * tone) * env
+            elif drum_id in (42,):  # closed hi-hat — very short noise
+                n_d = min(n, int(0.04 * SR))
+                noise = _np.random.default_rng(7).standard_normal(n_d)
+                env   = _np.exp(-80 * _np.linspace(0, n_d / SR, n_d))
+                w = noise * env
+            elif drum_id in (46,):  # open hi-hat — longer noise
+                n_d = min(n, int(0.25 * SR))
+                noise = _np.random.default_rng(7).standard_normal(n_d)
+                env   = _np.exp(-12 * _np.linspace(0, n_d / SR, n_d))
+                w = noise * env
+            else:                   # generic: short noise burst
+                n_d = min(n, int(0.10 * SR))
+                noise = _np.random.default_rng(drum_id).standard_normal(n_d)
+                env   = _np.exp(-30 * _np.linspace(0, n_d / SR, n_d))
+                w = noise * env
+            mix[s0:s0 + len(w)] += w * amp
+            continue
+
+        try:
+            freq = _audio_note_freq(note) if note else float(layer.get('freq', 440.0))
+        except ValueError:
+            continue  # skip layers with unparseable note names (e.g. chord symbols like "Am7")
+        # ADSR defaults per timbre (used when layer has no 'adsr' key)
+        adsr_raw = layer.get('adsr')
+        if adsr_raw and len(adsr_raw) == 4:
+            atk, dec, sus_lev, rel = [float(x) for x in adsr_raw]
+        else:
+            _defs = {
+                'piano':   [0.01, 0.10, 0.60, 0.30],
+                'bell':    [0.001,0.50, 0.00, 0.80],
+                'organ':   [0.05, 0.00, 0.90, 0.05],
+                'strings': [0.40, 0.10, 0.80, 0.50],
+                'flute':   [0.15, 0.05, 0.80, 0.20],
+                'brass':   [0.05, 0.05, 0.80, 0.15],
+            }
+            atk, dec, sus_lev, rel = _defs.get(wave_type, [0.01, 0.10, 0.70, 0.30])
+
+        # Ring-out: release tail extends PAST note boundary (natural instrument decay)
+        # Attack+decay+sustain fill the note window; release happens after note ends
+        n_ring = min(int(rel * SR), max(0, n_total - s1))
+        n_ext = n + n_ring
+
+        t = _np.linspace(0, n_ext / SR, n_ext, endpoint=False)
         if wave_type in _TIMBRE_HARMONICS:
-            w = _gen_timbre(wave_type, freq, n, SR, _np)
+            w = _gen_timbre(wave_type, freq, n_ext, SR, _np)
         elif wave_type == 'square':
             w = _np.sign(_np.sin(2 * _np.pi * freq * t))
         elif wave_type == 'sawtooth':
@@ -1963,26 +2395,23 @@ def _audio_synth(params):
         elif wave_type == 'triangle':
             w = 2 * _np.abs(2 * (t * freq - _np.floor(t * freq + 0.5))) - 1
         elif wave_type == 'noise':
-            w = _np.random.uniform(-1, 1, n)
+            w = _np.random.uniform(-1, 1, n_ext)
         else:
             w = _np.sin(2 * _np.pi * freq * t)
-        adsr = layer.get('adsr')
-        if adsr and len(adsr) == 4:
-            atk, dec, sus, rel = [float(x) for x in adsr]
-            a = min(int(atk * SR), n)
-            d = min(int(dec * SR), max(0, n - a))
-            r = min(int(rel * SR), max(0, n - a - d))
-            s = max(0, n - a - d - r)
-            env = _np.concatenate([
-                _np.linspace(0, 1, a) if a else _np.array([]),
-                _np.linspace(1, sus, d) if d else _np.array([]),
-                _np.full(s, sus),
-                _np.linspace(sus, 0, r) if r else _np.array([]),
-            ])[:n]
-            if len(env) < n:
-                env = _np.pad(env, (0, n - len(env)))
-            w = w * env
-        mix[s0:s1] += w * amp
+
+        a_smp = min(int(atk * SR), n)
+        d_smp = min(int(dec * SR), max(0, n - a_smp))
+        s_smp = max(0, n - a_smp - d_smp)
+        env_parts = []
+        if a_smp: env_parts.append(_np.linspace(0, 1, a_smp))
+        if d_smp: env_parts.append(_np.linspace(1, sus_lev, d_smp))
+        if s_smp: env_parts.append(_np.full(s_smp, sus_lev))
+        if n_ring: env_parts.append(_np.linspace(sus_lev, 0, n_ring))
+        env = _np.concatenate(env_parts) if env_parts else _np.ones(n_ext)
+        if len(env) < n_ext:
+            env = _np.pad(env, (0, n_ext - len(env)))
+
+        mix[s0:s0 + n_ext] += w[:n_ext] * env[:n_ext] * amp
 
     for fx in params.get('effects', []):
         ft = fx.get('type', '')
@@ -1995,14 +2424,25 @@ def _audio_synth(params):
                 b, a = butter(4, cutoff / nyq, btype=btype)
                 mix = filtfilt(b, a, mix)
         elif ft == 'reverb':
-            wet = float(fx.get('wet', 0.3))
-            d1, d2 = int(0.03 * SR), int(0.07 * SR)
-            out = mix.copy()
-            if n_total > d1:
-                out[d1:] += mix[:-d1] * wet * 0.6
-            if n_total > d2:
-                out[d2:] += mix[:-d2] * wet * 0.3
-            mix = out
+            from scipy.signal import lfilter as _lf
+            wet  = float(fx.get('wet',  0.3))
+            room = float(fx.get('room', 0.5))   # 0=small, 1=large hall
+            fb   = 0.50 + room * 0.44            # feedback coeff 0.50–0.94
+            # 4 parallel feedback comb filters (Schroeder/Freeverb delays @ 44100 Hz)
+            comb_ms = [1116, 1188, 1277, 1356]
+            rev = _np.zeros(n_total)
+            for dm in comb_ms:
+                d = int(dm * SR / 44100)
+                a = _np.zeros(d + 1); a[0] = 1.0; a[d] = -fb
+                rev += _lf([1.0], a, mix)
+            rev /= len(comb_ms)
+            # 2 series allpass diffusers
+            for dm, ap in [(556, 0.5), (441, 0.5)]:
+                d = int(dm * SR / 44100)
+                b = _np.zeros(d + 1); b[0] = -ap; b[d] = 1.0
+                a = _np.zeros(d + 1); a[0] =  1.0; a[d] = -ap
+                rev = _lf(b, a, rev)
+            mix = mix * (1.0 - wet) + rev * wet
         elif ft == 'echo':
             ds = int(float(fx.get('delay', 0.3)) * SR)
             dec_v = float(fx.get('decay', 0.5))
@@ -2020,17 +2460,163 @@ def _audio_synth(params):
     return buf.getvalue()
 
 
+_AUDIO_CACHE_DIR = '/app/audio_cache'
+
+
+def _save_audio_cache(wav_bytes):
+    """Save WAV to persistent cache, return UUID string."""
+    import uuid as _uuid, os as _os
+    _os.makedirs(_AUDIO_CACHE_DIR, exist_ok=True)
+    uid = str(_uuid.uuid4())
+    with open(f'{_AUDIO_CACHE_DIR}/{uid}.wav', 'wb') as f:
+        f.write(wav_bytes)
+    return uid
+
+
+@app.route('/api/audio/cache/<uid>', methods=['GET'])
+def audio_cache_serve(uid):
+    """Serve a previously cached WAV file by UUID."""
+    import os as _os, re as _re
+    if not _re.match(r'^[0-9a-f\-]{36}$', uid):
+        return jsonify({'error': 'invalid id'}), 400
+    path = f'{_AUDIO_CACHE_DIR}/{uid}.wav'
+    if not _os.path.exists(path):
+        return jsonify({'error': 'not found'}), 404
+    with open(path, 'rb') as f:
+        return Response(f.read(), mimetype='audio/wav')
+
+
 @app.route('/api/audio/generate', methods=['POST'])
 def audio_generate():
     data = request.get_json() or {}
     params = data.get('params', data)
     try:
         wav_bytes = _audio_synth(params)
-        return Response(wav_bytes, mimetype='audio/wav')
+        uid = _save_audio_cache(wav_bytes)
+        resp = Response(wav_bytes, mimetype='audio/wav')
+        resp.headers['X-Audio-Id'] = uid
+        return resp
     except Exception as e:
         import traceback as _tb
         print(f'[audio] ERROR: {e}\nparams={params}\n{_tb.format_exc()}', flush=True)
         return jsonify({'error': str(e)}), 400
+
+
+_COMPOSE_PLAN_PROMPT = """You are a music structure planner. Output ONLY valid JSON — no prose, no markdown fences.
+
+Create a composition plan for: "{description}"
+
+Return exactly this structure:
+{{
+  "tempo": <BPM integer, 60-200>,
+  "key": "<tonic> <mode>",
+  "time_signature": "4/4",
+  "total_beats": <integer, multiple of 4>,
+  "sections": [
+    {{"name": "<Intro|Development|Climax|Bridge|Outro>",
+      "start_beat": <int>,
+      "beats": <int, multiple of 4>,
+      "harmony": ["<chord>", ...],
+      "velocity": "<ppp|pp|p|mp|mf|f|ff|fff>",
+      "role": "<one sentence describing texture and purpose>"}}
+  ],
+  "voices": ["melody:piano", "harmony:strings", "bass:piano"]
+}}
+
+Rules:
+- sections must cover all beats from 0 to total_beats without gaps or overlaps
+- Arc of dynamics: build toward climax, resolve at outro
+- Keep total_beats ≤ 128 (about 30-60 seconds at moderate tempo)"""
+
+_COMPOSE_REALIZE_PROMPT = """You are a music composer. Output ONLY valid JSON — no prose, no markdown fences.
+
+Realize this structural plan into concrete musical events:
+{plan}
+
+Return exactly:
+{{"tempo": <same as plan>, "events": [
+  {{"track": "<piano|bass|strings|bell|organ|flute|brass|drums>",
+    "note": "<NoteOctave, [chord], or drum sound name>",
+    "start": <float beats from beginning>,
+    "beats": <float duration>,
+    "velocity": "<mp|mf|f>"}}
+]}}
+
+Composition rules:
+- Cover ALL beats 0→{total_beats} with at least one voice active at all times (no silence gaps)
+- Melody (piano): vary rhythm — mix 0.5 (eighth), 1 (quarter), 2 (half) beat notes; follow section harmony
+- Bass: root notes of each chord in low register (A1, E2, D2 etc.), 1-2 beat durations
+- Harmony (strings): sustained chords 4-8 beats, slow attack feels warm
+- Drums: use "kick" on beats 1 & 3, "snare" on beats 2 & 4, "hihat" every 0.5 beats
+          Available drum notes: kick, snare, hihat, open_hihat, crash, ride, hi_tom, mid_tom, floor_tom, clap
+- Velocity: keep consistent within each section — do NOT alternate mp/f/mp on consecutive notes
+- Melodic note names: C4, D#5, Bb3, F#4 (letter + optional # or b + digit — no chord names like Am7)
+- Chords: array of individual notes ["C4","E4","G4"] — never a chord name string
+- IMPORTANT: events must span the ENTIRE piece; do not concentrate notes only at the beginning
+- CRITICAL: track must be one of: piano, bass, strings, bell, organ, flute, brass, drums — no colon format"""
+
+
+@app.route('/api/audio/compose', methods=['POST'])
+def audio_compose():
+    """Two-stage LLM composition: plan → realize → synthesize."""
+    import traceback as _tb
+    data = request.get_json(force=True) or {}
+    description   = data.get('description', 'a short melodic piece')
+    provider      = data.get('provider', 'ollama')
+    model         = data.get('model', '')
+    api_key       = data.get('api_key', '')
+    server_url    = data.get('server_url', 'http://localhost:11434')
+    # Optional faster model override for background LLM calls
+    bg_model      = data.get('bg_model') or model
+    bg_provider   = data.get('bg_provider') or provider
+    bg_server_url = data.get('bg_server_url') or server_url
+    bg_api_key    = data.get('bg_api_key') or api_key
+
+    try:
+        # ── Stage 1: structural plan ──────────────────────────────────────────
+        plan_prompt = _COMPOSE_PLAN_PROMPT.format(description=description)
+        plan_text = _call_llm_simple(bg_provider, bg_model, plan_prompt,
+                                     api_key=bg_api_key, server_url=bg_server_url,
+                                     temp=0.4, ctx=2048, timeout=600)
+        plan = _loads_lenient(plan_text)
+        if not plan or 'sections' not in plan:
+            return jsonify({'error': 'Plan generation failed', 'raw': plan_text}), 500
+
+        total_beats = plan.get('total_beats', 32)
+
+        # ── Stage 2: realize events ───────────────────────────────────────────
+        realize_prompt = _COMPOSE_REALIZE_PROMPT.format(
+            plan=json.dumps(plan, ensure_ascii=False),
+            total_beats=total_beats,
+        )
+        events_text = _call_llm_simple(bg_provider, bg_model, realize_prompt,
+                                       api_key=bg_api_key, server_url=bg_server_url,
+                                       temp=0.6, ctx=4096, timeout=600)
+        events_data = _loads_lenient(events_text)
+        if not events_data or 'events' not in events_data:
+            return jsonify({'error': 'Event realization failed', 'raw': events_text}), 500
+
+        # ── Stage 3: synthesize ───────────────────────────────────────────────
+        n_events = len(events_data.get('events', events_data.get('layers', [])))
+        print(f'[compose] plan tempo={plan.get("tempo")} key={plan.get("key")} '
+              f'total_beats={total_beats} n_events={n_events}', flush=True)
+        wav_bytes = _audio_synth(events_data)
+        uid = _save_audio_cache(wav_bytes)
+        resp = Response(wav_bytes, mimetype='audio/wav')
+        resp.headers['X-Audio-Id'] = uid
+        import base64 as _b64
+        plan_summary = json.dumps({
+            'tempo': plan.get('tempo'), 'key': plan.get('key'),
+            'sections': [{'name': s['name'], 'beats': s['beats'],
+                          'velocity': s['velocity']} for s in plan.get('sections', [])],
+            'n_events': n_events,
+        }, ensure_ascii=False)
+        resp.headers['X-Compose-Plan'] = _b64.b64encode(plan_summary.encode()).decode()
+        return resp
+
+    except Exception as e:
+        print(f'[compose] ERROR: {e}\n{_tb.format_exc()}', flush=True)
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/export_chat', methods=['POST'])
