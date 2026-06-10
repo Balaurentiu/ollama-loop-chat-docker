@@ -2044,28 +2044,31 @@ async function runWebSearch(agKey, reason, query) {
       const reader = resp.body.getReader();
       const dec = new TextDecoder();
       let buf = '';
+      const _processWsLine = (line) => {
+        if (!line.trim()) return;
+        try {
+          const obj = JSON.parse(line);
+          if (obj.step !== undefined && obj.stepStatus) _wsSetStep(obj.step, obj.stepStatus);
+          if (obj.log) _wsAddLog(obj.log);
+          if (obj.stats) _wsSetLiveStats(obj.stats);
+          if (obj.done) finalResult = obj.result || null;
+        } catch(e) {}
+      };
       while (true) {
         const {done, value} = await reader.read();
-        if (done) break;
+        if (done) {
+          // Flush any remaining buffered line (in case final chunk had no trailing \n)
+          if (buf.trim()) _processWsLine(buf);
+          break;
+        }
         buf += dec.decode(value, {stream: true});
         const lines = buf.split('\n');
         buf = lines.pop();
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const obj = JSON.parse(line);
-            if (obj.step !== undefined && obj.stepStatus) _wsSetStep(obj.step, obj.stepStatus);
-            if (obj.log) _wsAddLog(obj.log);
-            if (obj.stats) _wsSetLiveStats(obj.stats);
-            if (obj.done) {
-              finalResult = obj.result || null;
-            }
-          } catch(e) {}
-        }
+        for (const line of lines) _processWsLine(line);
       }
     } catch(e) {
       if (e.name === 'AbortError') {
-        // Browser refresh/close — keep task_id in sessionStorage for reconnect
+        // User stopped search or page unloading — keep task_id in sessionStorage for reconnect
         return;
       }
       _wsAddLog('Eroare stream: ' + e.message);
@@ -2433,6 +2436,10 @@ async function runLoop() {
       addSystemMsg(`🔍 ${cfg[wsAg+'Name'] || 'Agent'} caută: "${query}"`);
       try {
         const wsResult = await runWebSearch(wsAg, reason, query);
+        if (wsResult === undefined) {
+          // AbortError (user stopped search or page unloading) — do not continue loop
+          state.running = false; break;
+        }
         if (wsResult && wsResult.summary) {
           state.discussion.push({role: 'system', content: wsResult.summary, step: state.stepCount});
           state.discussion.push({role: 'wsresult', content: JSON.stringify(wsResult), step: state.stepCount});
@@ -4226,34 +4233,45 @@ restoreDiscussionFromDisk();
   try {
     const r = await fetch('/api/websearch/status');
     const d = await r.json();
-    const running = (d.tasks || []).filter(t => t.status === 'running');
-    if (!running.length) return;
-    const task = running[0];
-    addSystemMsg('🔄 Reconectare la căutarea web în curs...');
+    const allTasks = d.tasks || [];
+    // Priority: task stored in sessionStorage (handles done-but-unprocessed after page refresh)
+    const storedId = sessionStorage.getItem('_ws_task_id');
+    let task = storedId ? allTasks.find(t => t.task_id === storedId) : null;
+    // Fallback: any running task (e.g. started from another tab)
+    if (!task) task = allTasks.find(t => t.status === 'running');
+    if (!task) return;
+    const isAlreadyDone = task.status === 'done';
+    addSystemMsg(isAlreadyDone
+      ? '🔄 Reconectare la rezultatele căutării web (pagina s-a reîncărcat în timpul căutării)...'
+      : '🔄 Reconectare la căutarea web în curs...');
     openWsModal();
     _wsResetModal();
-    document.getElementById('btn-ws-stop').style.display = 'inline-flex';
-    _wsUpdateChip(true);   // show glow immediately; polling will maintain it
-    _wsServerRunning = true; // sync so polling doesn't call _wsUpdateChip redundantly
+    if (!isAlreadyDone) document.getElementById('btn-ws-stop').style.display = 'inline-flex';
+    _wsUpdateChip(!isAlreadyDone);
+    _wsServerRunning = !isAlreadyDone;
     const resp = await fetch('/api/websearch/stream/' + task.task_id);
     if (!resp.ok) return;
     const reader = resp.body.getReader();
     const dec = new TextDecoder();
     let buf = '', finalResult = null;
+    const _processReconnLine = (line) => {
+      if (!line.trim()) return;
+      try {
+        const obj = JSON.parse(line);
+        if (obj.step !== undefined && obj.stepStatus) _wsSetStep(obj.step, obj.stepStatus);
+        if (obj.log) _wsAddLog(obj.log);
+        if (obj.done && obj.result) finalResult = obj.result;
+      } catch(e) {}
+    };
     while (true) {
       const {done, value} = await reader.read();
-      if (done) break;
+      if (done) {
+        if (buf.trim()) _processReconnLine(buf);
+        break;
+      }
       buf += dec.decode(value, {stream: true});
       const lines = buf.split('\n'); buf = lines.pop();
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const obj = JSON.parse(line);
-          if (obj.step !== undefined && obj.stepStatus) _wsSetStep(obj.step, obj.stepStatus);
-          if (obj.log) _wsAddLog(obj.log);
-          if (obj.done && obj.result) finalResult = obj.result;
-        } catch(e) {}
-      }
+      for (const line of lines) _processReconnLine(line);
     }
     sessionStorage.removeItem('_ws_task_id');
     if (finalResult && finalResult.success) {
